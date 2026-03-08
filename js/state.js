@@ -3,6 +3,10 @@
 export let state = null;
 
 export function initState() {
+  // Clear any stale listeners from a previous session
+  for (const key of Object.keys(listeners)) {
+    delete listeners[key];
+  }
   state = createDefaultState();
 }
 
@@ -64,6 +68,10 @@ export function emit(event, data) {
 // ── Mutations ────────────────────────────────────────────
 export function addCurrency(type, amount) {
   if (amount <= 0) return;
+  if (!(type in state.currencies)) {
+    console.warn('[State] addCurrency: unknown type:', type);
+    return;
+  }
   state.currencies[type] += amount;
   if (type === 'bits') state.currencies.lifetimeBits += amount;
   emit('currency:change', { type, amount, total: state.currencies[type] });
