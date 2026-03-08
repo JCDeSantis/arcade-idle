@@ -1,5 +1,17 @@
-// js/games/launcher.js — stub (will be updated in Task 8)
+// js/games/launcher.js
+
+import { launchPaddle } from './paddle.js';
+import { launchTarget } from './target.js';
+
+const launchers = {
+  paddle: launchPaddle,
+  target: launchTarget,
+};
+
 export function launchGame(id) {
-  console.log('[Launcher] launching:', id);
-  alert(`Game: ${id} — coming soon!`);
+  const launch = launchers[id];
+  if (!launch) return console.warn('[Launcher] unknown game:', id);
+  launch(() => {
+    console.log('[Launcher] returned from:', id);
+  });
 }
