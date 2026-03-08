@@ -1,2 +1,13 @@
-// js/main.js — entry point (stub, will be updated as modules are added)
-console.log('[ArcadeIdle] scaffold ready');
+// js/main.js — entry point (wiring grows with each task)
+import { initState } from './state.js';
+import { loadSave }  from './save.js';
+import { startLoop } from './loop.js';
+
+function main() {
+  initState();
+  loadSave();
+  startLoop();
+  console.log('[ArcadeIdle] loop started');
+}
+
+main();
