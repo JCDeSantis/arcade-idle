@@ -23,11 +23,17 @@ export function openPanel(name) {
     </div>
   `;
   document.getElementById('panel-close-btn').addEventListener('click', closePanel);
-  overlay.addEventListener('click', e => { if (e.target === overlay) closePanel(); });
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) closePanel();
+  }, { once: true });
 
   panelInits[name]?.();
 }
 
 export function closePanel() {
   document.getElementById('panel-overlay').classList.add('hidden');
+}
+
+export function refreshPanel() {
+  // called by panel contents to re-render themselves
 }
