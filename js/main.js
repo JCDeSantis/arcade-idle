@@ -1,13 +1,17 @@
-// js/main.js — entry point (wiring grows with each task)
+// js/main.js — entry point
 import { initState } from './state.js';
 import { loadSave }  from './save.js';
 import { startLoop } from './loop.js';
+import { initHUD }   from './ui/hud.js';
+import { initHub }   from './ui/hub.js';
 
 function main() {
   initState();
   loadSave();
+  initHUD();
+  initHub();
   startLoop();
-  console.log('[ArcadeIdle] loop started');
+  console.log('[ArcadeIdle] initialized');
 }
 
 main();
