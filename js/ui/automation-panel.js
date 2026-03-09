@@ -22,6 +22,7 @@ function renderAutomationPanel() {
   const games = [
     { id: 'paddle', label: 'PADDLE.EXE' },
     { id: 'target', label: 'TARGET.EXE' },
+    { id: 'circuit', label: 'CIRCUIT.EXE' },
   ];
 
   const totalRate = getTotalAutoRate();
