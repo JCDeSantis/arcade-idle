@@ -60,8 +60,8 @@ export function launchPaddle(onExit) {
   canvas.addEventListener('mousemove', e => {
     const rect = canvas.getBoundingClientRect();
     game.paddleX = clamp(
-      e.clientX - rect.left - game.paddleW / 2,
-      0, CANVAS_W - game.paddleW
+      e.clientX - rect.left - (game.effectivePaddleW ?? game.paddleW) / 2,
+      0, CANVAS_W - (game.effectivePaddleW ?? game.paddleW)
     );
   });
 
@@ -110,73 +110,161 @@ function initGame() {
     paddleW:  80,
     paddleX:  CANVAS_W / 2 - 40,
     paddleY:  CANVAS_H - 28,
-    ball: {
+    balls: [{
       x: CANVAS_W / 2,
       y: CANVAS_H / 2,
       r: 7,
       vx: 220 * (Math.random() > 0.5 ? 1 : -1),
       vy: -220,
-    },
+    }],
+    drops: [],
+    activeEffects: {},
+    shieldActive: false,
+    stickyBall: null,
+    dropChance: 0,
+    effectivePaddleW: 80,
     _keys: {},
   };
 }
 
 function update(g, dt) {
-  const b = g.ball;
-  const SPEED_SCALE = 1 + g.elapsed / SESSION_SECS * 0.6; // speeds up over time
+  const SPEED_SCALE = (1 + g.elapsed / SESSION_SECS * 0.6)
+    * (g.activeEffects.slow_mo > 0 ? 0.5 : 1);
+
+  // Compute effective paddle width (wide_paddle effect applied here)
+  g.effectivePaddleW = g.paddleW * (g.activeEffects.wide_paddle > 0 ? 1.5 : 1);
 
   // Keyboard paddle movement
   const spd = 400 * dt;
-  if (g._keys['ArrowLeft']  || g._keys['a'] || g._keys['A']) g.paddleX = clamp(g.paddleX - spd, 0, CANVAS_W - g.paddleW);
-  if (g._keys['ArrowRight'] || g._keys['d'] || g._keys['D']) g.paddleX = clamp(g.paddleX + spd, 0, CANVAS_W - g.paddleW);
+  const pw  = g.effectivePaddleW;
+  if (g._keys['ArrowLeft']  || g._keys['a'] || g._keys['A'])
+    g.paddleX = clamp(g.paddleX - spd, 0, CANVAS_W - pw);
+  if (g._keys['ArrowRight'] || g._keys['d'] || g._keys['D'])
+    g.paddleX = clamp(g.paddleX + spd, 0, CANVAS_W - pw);
 
-  b.x += b.vx * dt * SPEED_SCALE;
-  b.y += b.vy * dt * SPEED_SCALE;
+  // Sticky: lock attached ball to paddle
+  if (g.stickyBall) {
+    const { ball, offsetX } = g.stickyBall;
+    ball.x = g.paddleX + pw / 2 + offsetX;
+    ball.y = g.paddleY - ball.r;
+  }
 
-  // Wall bounce
-  if (b.x - b.r < 0)           { b.x = b.r;            b.vx = Math.abs(b.vx); }
-  if (b.x + b.r > CANVAS_W)    { b.x = CANVAS_W - b.r; b.vx = -Math.abs(b.vx); }
-  if (b.y - b.r < 0)           { b.y = b.r;             b.vy = Math.abs(b.vy); }
+  // Space to release sticky ball
+  if (g._keys[' '] && g.stickyBall) {
+    releaseStickyBall(g);
+    g._keys[' '] = false;
+  }
 
-  // Ball lost bottom — small score penalty, reset ball
-  if (b.y - b.r > CANVAS_H) {
+  // Update each ball
+  const survivingBalls = [];
+  for (const b of g.balls) {
+    updateBall(g, b, dt, SPEED_SCALE);
+    const lost = b.y - b.r > CANVAS_H;
+    if (lost) {
+      if (g.shieldActive) {
+        g.shieldActive = false;
+        b.y = g.paddleY - b.r;
+        b.vy = -Math.abs(b.vy);
+        survivingBalls.push(b);
+      } else {
+        if (g.stickyBall?.ball === b) g.stickyBall = null;
+      }
+    } else {
+      survivingBalls.push(b);
+    }
+  }
+
+  // If all balls lost: penalty + respawn
+  if (survivingBalls.length === 0) {
     g.score = Math.max(0, g.score - 50);
     g.combo = 0;
-    b.x = CANVAS_W / 2;
-    b.y = CANVAS_H / 2;
-    b.vx = 220 * (Math.random() > 0.5 ? 1 : -1);
-    b.vy = -220;
+    survivingBalls.push({
+      x: CANVAS_W / 2, y: CANVAS_H / 2, r: 7,
+      vx: 220 * (Math.random() > 0.5 ? 1 : -1),
+      vy: -220,
+    });
   }
+  g.balls = survivingBalls;
+}
 
-  // Paddle collision
-  const px = g.paddleX, pw = g.paddleW, py = g.paddleY;
-  const prevY = b.y - b.vy * dt * SPEED_SCALE;
-  if (
-    b.vy > 0 &&
-    prevY + b.r < py && b.y + b.r >= py &&
-    b.x >= px && b.x <= px + pw
-  ) {
-    b.y = py - b.r; // prevent overlap
-    b.vy = -Math.abs(b.vy);
-    // Angle based on hit position
-    const hitFrac = (b.x - px) / pw; // 0–1
-    b.vx = (hitFrac - 0.5) * 400 + (Math.random() - 0.5) * 40;
-  }
+function updateBall(g, b, dt, SPEED_SCALE) {
+  // Sub-step if fast enough to tunnel through a block
+  const speed = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+  const steps = (speed * dt * SPEED_SCALE > BLOCK_H / 2) ? 2 : 1;
+  const subDt  = dt / steps;
 
-  // Block collisions
-  for (const block of g.blocks) {
-    if (circleRect(b, block)) {
+  for (let s = 0; s < steps; s++) {
+    const prevX = b.x;
+    const prevY = b.y;
+
+    b.x += b.vx * subDt * SPEED_SCALE;
+    b.y += b.vy * subDt * SPEED_SCALE;
+
+    // Wall bounce
+    if (b.x - b.r < 0)        { b.x = b.r;            b.vx =  Math.abs(b.vx); }
+    if (b.x + b.r > CANVAS_W) { b.x = CANVAS_W - b.r; b.vx = -Math.abs(b.vx); }
+    if (b.y - b.r < 0)        { b.y = b.r;             b.vy =  Math.abs(b.vy); }
+
+    // Paddle collision
+    const px = g.paddleX;
+    const pw = g.effectivePaddleW;
+    const py = g.paddleY;
+    const pH = 12; // paddle height
+
+    // Top surface
+    if (
+      b.vy > 0 &&
+      prevY + b.r < py && b.y + b.r >= py &&
+      b.x >= px && b.x <= px + pw
+    ) {
+      b.y  = py - b.r;
+      b.vy = -Math.abs(b.vy);
+      const hitFrac = (b.x - px) / pw;
+      b.vx = (hitFrac - 0.5) * 400 + (Math.random() - 0.5) * 40;
+    }
+
+    // Left side of paddle
+    if (
+      b.vx > 0 &&
+      prevX + b.r <= px && b.x + b.r > px &&
+      b.y + b.r > py && b.y - b.r < py + pH
+    ) {
+      b.x  = px - b.r;
+      b.vx = -Math.abs(b.vx);
+    }
+
+    // Right side of paddle
+    if (
+      b.vx < 0 &&
+      prevX - b.r >= px + pw && b.x - b.r < px + pw &&
+      b.y + b.r > py && b.y - b.r < py + pH
+    ) {
+      b.x  = px + pw + b.r;
+      b.vx = Math.abs(b.vx);
+    }
+
+    // Block collisions
+    for (const block of g.blocks) {
+      if (!circleRect(b, block)) continue;
+
       g.combo++;
-      const pts = block.points * Math.ceil(g.combo / 3);
+      const multiplier = g.activeEffects.score_mult > 0 ? 2 : 1;
+      const pts = block.points * Math.ceil(g.combo / 3) * multiplier;
       g.score += pts;
       g.blocks = g.blocks.filter(bl => bl !== block);
-      // Detect which face was hit by comparing overlap on each axis
-      const overlapX = Math.min(b.x - block.x, (block.x + block.w) - b.x);
-      const overlapY = Math.min(b.y - block.y, (block.y + block.h) - b.y);
-      if (overlapX < overlapY) {
-        b.vx = -b.vx;
-      } else {
-        b.vy = -b.vy;
+
+      // Spawn power-up drop (spawnPowerup imported in Task 7)
+      if (Math.random() < g.dropChance) {
+        const drop = spawnPowerup(block);
+        if (drop) g.drops.push(drop);
+      }
+
+      // Fireball: pass through without bouncing
+      if (!(g.activeEffects.fireball > 0)) {
+        const overlapX = Math.min(b.x - block.x, (block.x + block.w) - b.x);
+        const overlapY = Math.min(b.y - block.y, (block.y + block.h) - b.y);
+        if (overlapX < overlapY) b.vx = -b.vx;
+        else                     b.vy = -b.vy;
       }
       break;
     }
@@ -213,7 +301,7 @@ function render(ctx, g) {
   }
 
   // Paddle
-  const px = g.paddleX, py = g.paddleY, pw = g.paddleW;
+  const px = g.paddleX, py = g.paddleY, pw = g.effectivePaddleW ?? g.paddleW;
   ctx.fillStyle = '#00ffff22';
   ctx.fillRect(px, py, pw, 12);
   ctx.strokeStyle = '#00ffff';
@@ -223,15 +311,30 @@ function render(ctx, g) {
   ctx.strokeRect(px, py, pw, 12);
   ctx.shadowBlur = 0;
 
-  // Ball
-  const b = g.ball;
-  ctx.beginPath();
-  ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
-  ctx.fillStyle = '#ffffff';
-  ctx.shadowColor = '#00ffff';
-  ctx.shadowBlur = 14;
-  ctx.fill();
-  ctx.shadowBlur = 0;
+  // Balls
+  for (const b of g.balls) {
+    const isFireball = g.activeEffects.fireball > 0;
+    const isSticky   = g.stickyBall?.ball === b;
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+    ctx.fillStyle   = isFireball ? '#ff6600' : '#ffffff';
+    ctx.shadowColor = isFireball ? '#ff4400' : '#38d4d4';
+    ctx.shadowBlur  = isFireball ? 20 : 14;
+    ctx.fill();
+    ctx.shadowBlur  = 0;
+
+    // Sticky tether line
+    if (isSticky) {
+      ctx.strokeStyle = '#e04ca0';
+      ctx.lineWidth   = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(b.x, b.y + b.r);
+      ctx.lineTo(b.x, g.paddleY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
 
   // Combo indicator
   if (g.combo > 1) {
@@ -248,6 +351,18 @@ function circleRect(b, r) {
   const dx = b.x - nearX, dy = b.y - nearY;
   return dx * dx + dy * dy < b.r * b.r;
 }
+
+function releaseStickyBall(g) {
+  if (!g.stickyBall) return;
+  const b = g.stickyBall.ball;
+  const speed = 220 * (1 + g.elapsed / SESSION_SECS * 0.6);
+  b.vx = (Math.random() - 0.5) * 200;
+  b.vy = -speed * 0.9;
+  g.stickyBall = null;
+}
+
+// Placeholder — replaced by real import in Task 7
+function spawnPowerup(block) { return null; }
 
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
