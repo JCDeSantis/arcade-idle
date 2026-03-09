@@ -7,9 +7,10 @@ import { saveGame, exportSave, importSave, deleteSave } from '../save.js';
 
 export function initHub() {
   renderHub();
-  on('stage:unlock', () => {
+  on('stage:unlock', ({ stage }) => {
     renderHub();
-    showNotification('STAGE 2 UNLOCKED — TARGET GAME NOW AVAILABLE', 'var(--amber)');
+    if (stage === 2) showNotification('STAGE 2 UNLOCKED — TARGET GAME NOW AVAILABLE', 'var(--amber)');
+    if (stage === 3) showNotification('STAGE 3 UNLOCKED — CIRCUIT GAME NOW AVAILABLE', 'var(--cyan)');
   });
   on('game:result',  () => renderHub());
   on('prestige', ({ nc, count }) => {
@@ -24,6 +25,7 @@ function renderHub() {
     <div class="hub-games">
       ${gameCard('paddle', '🎮', 'PADDLE')}
       ${gameCard('target', '🎯', 'TARGET')}
+      ${gameCard('circuit', '🔗', 'CIRCUIT')}
     </div>
     <div class="hub-title">AI TRAINING ARCADE</div>
     ${state.prestige.count > 0 ? `<div class="hub-prestige-badge">PRESTIGE ${state.prestige.count}</div>` : ''}
@@ -137,7 +139,11 @@ function gameCard(id, icon, label) {
   const g = state.games[id];
   const locked = !g.unlocked;
   const mastery = g.mastery.toFixed(1);
-  const lockMsg = id === 'target' ? 'REACH 50K BITS' : '';
+  const lockMessages = {
+    target:  'REACH 50K BITS',
+    circuit: 'REACH 200K BITS',
+  };
+  const lockMsg = lockMessages[id] ?? '';
 
   return `
     <div class="game-card ${locked ? 'locked' : ''}" data-game="${id}">

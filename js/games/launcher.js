@@ -1,11 +1,13 @@
 // js/games/launcher.js
 
-import { launchPaddle } from './paddle.js';
-import { launchTarget } from './target.js';
+import { launchPaddle }   from './paddle.js';
+import { launchTarget }   from './target.js';
+import { launchCircuit }  from './circuit.js';
 
 const launchers = {
-  paddle: launchPaddle,
-  target: launchTarget,
+  paddle:  launchPaddle,
+  target:  launchTarget,
+  circuit: launchCircuit,
 };
 
 export function launchGame(id) {
