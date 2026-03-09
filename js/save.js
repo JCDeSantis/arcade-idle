@@ -79,7 +79,7 @@ function applyOfflineProgress() {
 function mergeInto(target, src, defaults) {
   for (const key of Object.keys(defaults)) {
     if (src[key] === undefined) continue;
-    if (isPlainObject(defaults[key]) && isPlainObject(src[key])) {
+    if (isPlainObject(defaults[key]) && isPlainObject(src[key]) && Object.keys(defaults[key]).length > 0) {
       mergeInto(target[key], src[key], defaults[key]);
     } else {
       target[key] = src[key];

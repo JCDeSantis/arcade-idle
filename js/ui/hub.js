@@ -3,7 +3,7 @@
 import { state, on } from '../state.js';
 import { openPanel }  from './panel.js';
 import { launchGame } from '../games/launcher.js';
-import { saveGame, exportSave, importSave } from '../save.js';
+import { saveGame, exportSave, importSave, deleteSave } from '../save.js';
 
 export function initHub() {
   renderHub();
@@ -33,10 +33,11 @@ function renderHub() {
       <button class="hub-tab" data-panel="prestige" id="prestige-tab"
         ${state.stage < 2 ? 'style="display:none"' : ''}>PRESTIGE</button>
     </div>
-    <div style="display:flex;gap:8px;margin-top:auto">
-      <button class="hub-tab" id="save-btn">💾 SAVE</button>
-      <button class="hub-tab" id="export-btn">📤 EXPORT</button>
-      <button class="hub-tab" id="import-btn">📥 IMPORT</button>
+    <div style="display:flex;gap:8px;margin-top:auto;flex-wrap:wrap;justify-content:center">
+      <button class="hub-tab" id="save-btn">SAVE</button>
+      <button class="hub-tab" id="export-btn">EXPORT</button>
+      <button class="hub-tab" id="import-btn">IMPORT</button>
+      <button class="hub-tab hub-tab-danger" id="clear-btn">CLEAR DATA</button>
     </div>
   `;
 
@@ -66,6 +67,54 @@ function renderHub() {
     const data = prompt('Paste save data:');
     if (data?.trim()) importSave(data.trim());
   });
+
+  document.getElementById('clear-btn').addEventListener('click', () => {
+    showClearConfirm();
+  });
+}
+
+function showClearConfirm() {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `
+    position:fixed;inset:0;background:rgba(0,0,0,0.82);z-index:300;
+    display:flex;align-items:center;justify-content:center;
+    animation:fadeIn 0.18s ease;
+  `;
+  overlay.innerHTML = `
+    <div style="
+      background:var(--bg2);border:1px solid var(--red);border-radius:4px;
+      padding:32px 28px;max-width:320px;width:90%;text-align:center;
+      font-family:var(--font);
+      box-shadow:0 0 24px #e0484840;
+    ">
+      <div style="font-size:0.85rem;font-weight:700;letter-spacing:3px;color:var(--red);margin-bottom:12px">
+        CLEAR ALL DATA?
+      </div>
+      <div style="font-size:0.65rem;color:var(--text-dim);line-height:1.7;margin-bottom:24px">
+        This will permanently delete all progress,<br>
+        upgrades, currency, and mastery.<br>
+        <span style="color:var(--text)">This cannot be undone.</span>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:center">
+        <button id="clear-cancel" style="
+          flex:1;padding:10px;background:none;border:1px solid #333340;
+          color:var(--text-dim);font-family:var(--font);font-size:0.72rem;
+          letter-spacing:1px;cursor:pointer;border-radius:4px;
+          transition:all 0.2s ease;
+        ">CANCEL</button>
+        <button id="clear-confirm" style="
+          flex:1;padding:10px;background:none;border:1px solid var(--red);
+          color:var(--red);font-family:var(--font);font-size:0.72rem;
+          letter-spacing:1px;cursor:pointer;border-radius:4px;
+          transition:all 0.2s ease;
+        ">DELETE</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#clear-cancel').addEventListener('click', () => overlay.remove());
+  overlay.querySelector('#clear-confirm').addEventListener('click', () => deleteSave());
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 }
 
 function showNotification(msg, color = 'var(--cyan)') {

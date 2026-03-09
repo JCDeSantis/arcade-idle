@@ -3,21 +3,21 @@
   --bg:         #0a0a0f;
   --bg2:        #111118;
   --bg3:        #1a1a24;
-  --cyan:       #00ffff;
-  --magenta:    #ff00ff;
-  --green:      #00ff88;
-  --amber:      #ffaa00;
-  --red:        #ff4444;
-  --text:       #e0e0f0;
-  --text-dim:   #55556a;
+  --cyan:       #38d4d4;
+  --magenta:    #e04ca0;
+  --green:      #3ecb7c;
+  --amber:      #e89830;
+  --red:        #e04848;
+  --text:       #d8d8e8;
+  --text-dim:   #52526a;
   --font:       'Space Mono', monospace;
 
-  --glow-cyan:    0 0 6px #00ffff99, 0 0 18px #00ffff44;
-  --glow-magenta: 0 0 6px #ff00ff99, 0 0 18px #ff00ff44;
-  --glow-green:   0 0 6px #00ff8899, 0 0 18px #00ff8844;
-  --glow-amber:   0 0 6px #ffaa0099, 0 0 18px #ffaa0044;
+  --glow-cyan:    0 0 4px #38d4d470, 0 0 12px #38d4d428;
+  --glow-magenta: 0 0 4px #e04ca070, 0 0 12px #e04ca028;
+  --glow-green:   0 0 4px #3ecb7c70, 0 0 12px #3ecb7c28;
+  --glow-amber:   0 0 4px #e8983070, 0 0 12px #e8983028;
 
-  --border-cyan: 1px solid #00ffff44;
+  --border-cyan: 1px solid #38d4d430;
   --radius: 4px;
   --transition: 0.2s ease;
 }
@@ -29,8 +29,8 @@ body {
   font-family: var(--font);
   background-color: var(--bg);
   background-image:
-    linear-gradient(rgba(0, 255, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 255, 255, 0.025) 1px, transparent 1px);
+    linear-gradient(rgba(56, 212, 212, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 212, 212, 0.018) 1px, transparent 1px);
   background-size: 40px 40px;
   color: var(--text);
   min-height: 100vh;
@@ -54,7 +54,7 @@ body {
   justify-content: space-between;
   padding: 10px 24px;
   background: var(--bg2);
-  border-bottom: 1px solid #00ffff22;
+  border-bottom: 1px solid #38d4d420;
   flex-shrink: 0;
   z-index: 10;
 }
@@ -169,7 +169,7 @@ body {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, #00ffff08, transparent 60%);
+  background: linear-gradient(135deg, #38d4d408, transparent 60%);
   opacity: 0;
   transition: opacity 0.3s ease;
   pointer-events: none;
@@ -224,8 +224,18 @@ body {
   color: var(--cyan);
 }
 
+.hub-tab-danger {
+  border-color: #e0484840 !important;
+  color: #e04848aa !important;
+}
+
+.hub-tab-danger:hover {
+  border-color: var(--red) !important;
+  color: var(--red) !important;
+}
+
 .hub-tab.active {
-  background: #00ffff15;
+  background: #38d4d415;
   border-color: var(--cyan);
   color: var(--cyan);
   box-shadow: var(--glow-cyan);
@@ -261,7 +271,7 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
-  border-bottom: 1px solid #00ffff22;
+  border-bottom: 1px solid #38d4d420;
 }
 
 .panel-title {
@@ -416,7 +426,7 @@ body {
 /* ── Prestige Panel ─────────────────────────────────────── */
 .prestige-info {
   background: var(--bg3);
-  border: 1px solid #00ff8822;
+  border: 1px solid #3ecb7c20;
   border-radius: var(--radius);
   padding: 16px;
   margin-bottom: 16px;
@@ -450,7 +460,7 @@ body {
 }
 
 .prestige-btn:hover:not(:disabled) {
-  background: #00ff8818;
+  background: #3ecb7c18;
   box-shadow: var(--glow-green);
 }
 
@@ -458,7 +468,7 @@ body {
 
 .prestige-upgrade-card {
   background: var(--bg3);
-  border: 1px solid #00ff8822;
+  border: 1px solid #3ecb7c20;
   border-radius: var(--radius);
   padding: 14px 16px;
   display: flex;
@@ -615,14 +625,14 @@ body {
 }
 
 .result-btn:hover {
-  background: #00ffff18;
+  background: #38d4d418;
   box-shadow: var(--glow-cyan);
 }
 
 /* ── Scrollbar ──────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #00ffff33; border-radius: 2px; }
+::-webkit-scrollbar-thumb { background: #38d4d430; border-radius: 2px; }
 
 /* ── Utility ────────────────────────────────────────────── */
 .section-label {

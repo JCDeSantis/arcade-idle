@@ -70,8 +70,10 @@ function renderPrestigeUpgrade(u) {
 }
 
 function observePanelClose(cb) {
+  const panelBody = document.getElementById('panel-body');
+  if (!panelBody) return;
   const observer = new MutationObserver(() => {
-    if (!document.getElementById('panel-body')) { cb(); observer.disconnect(); }
+    if (!panelBody.isConnected) { cb(); observer.disconnect(); }
   });
-  observer.observe(document.getElementById('panel-overlay'), { childList: true });
+  observer.observe(document.getElementById('panel-overlay'), { childList: true, subtree: true });
 }
