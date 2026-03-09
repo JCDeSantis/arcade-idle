@@ -98,7 +98,6 @@ function initGame() {
         h: BLOCK_H,
         color: BLOCK_COLORS[row % BLOCK_COLORS.length],
         points: (ROWS - row) * 10,
-        alive: true,
       });
     }
   }
@@ -128,8 +127,8 @@ function update(g, dt) {
 
   // Keyboard paddle movement
   const spd = 400 * dt;
-  if (g._keys['ArrowLeft']  || g._keys['a']) g.paddleX = clamp(g.paddleX - spd, 0, CANVAS_W - g.paddleW);
-  if (g._keys['ArrowRight'] || g._keys['d']) g.paddleX = clamp(g.paddleX + spd, 0, CANVAS_W - g.paddleW);
+  if (g._keys['ArrowLeft']  || g._keys['a'] || g._keys['A']) g.paddleX = clamp(g.paddleX - spd, 0, CANVAS_W - g.paddleW);
+  if (g._keys['ArrowRight'] || g._keys['d'] || g._keys['D']) g.paddleX = clamp(g.paddleX + spd, 0, CANVAS_W - g.paddleW);
 
   b.x += b.vx * dt * SPEED_SCALE;
   b.y += b.vy * dt * SPEED_SCALE;
@@ -150,16 +149,18 @@ function update(g, dt) {
   }
 
   // Paddle collision
-  const px = g.paddleX, pw = g.paddleW, py = g.paddleY, ph = 12;
+  const px = g.paddleX, pw = g.paddleW, py = g.paddleY;
+  const prevY = b.y - b.vy * dt * SPEED_SCALE;
   if (
     b.vy > 0 &&
-    b.y + b.r >= py && b.y + b.r <= py + ph &&
+    prevY + b.r < py && b.y + b.r >= py &&
     b.x >= px && b.x <= px + pw
   ) {
+    b.y = py - b.r; // prevent overlap
     b.vy = -Math.abs(b.vy);
     // Angle based on hit position
     const hitFrac = (b.x - px) / pw; // 0–1
-    b.vx = (hitFrac - 0.5) * 500;
+    b.vx = (hitFrac - 0.5) * 400 + (Math.random() - 0.5) * 40;
   }
 
   // Block collisions
@@ -169,8 +170,14 @@ function update(g, dt) {
       const pts = block.points * Math.ceil(g.combo / 3);
       g.score += pts;
       g.blocks = g.blocks.filter(bl => bl !== block);
-      // Simple reflection: reverse vy
-      b.vy = -b.vy;
+      // Detect which face was hit by comparing overlap on each axis
+      const overlapX = Math.min(b.x - block.x, (block.x + block.w) - b.x);
+      const overlapY = Math.min(b.y - block.y, (block.y + block.h) - b.y);
+      if (overlapX < overlapY) {
+        b.vx = -b.vx;
+      } else {
+        b.vy = -b.vy;
+      }
       break;
     }
   }
