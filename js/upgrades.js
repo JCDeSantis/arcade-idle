@@ -87,6 +87,40 @@ export const UPGRADES = [
     maxLevel: 5,
     effect: lvl => 1 + lvl * 0.10,
   },
+  // ── Paddle gameplay upgrades ──────────────────────────
+  {
+    id: 'paddle_ball_speed',
+    name: 'Velocity Core',
+    desc: 'Paddle ball moves +15% faster per level',
+    icon: '💨',
+    currency: 'bits',
+    baseCost: 300,
+    costScale: 2.8,
+    maxLevel: 5,
+    effect: lvl => 1 + lvl * 0.15,
+  },
+  {
+    id: 'paddle_size',
+    name: 'Paddle Expander',
+    desc: 'Paddle is +15% wider per level',
+    icon: '↔',
+    currency: 'bits',
+    baseCost: 200,
+    costScale: 2.5,
+    maxLevel: 5,
+    effect: lvl => 1 + lvl * 0.15,
+  },
+  {
+    id: 'paddle_powerup_chance',
+    name: 'Loot Matrix',
+    desc: '+8% power-up drop chance per level (max 40%)',
+    icon: '🎁',
+    currency: 'trainingData',
+    baseCost: 30,
+    costScale: 2.2,
+    maxLevel: 5,
+    effect: lvl => Math.min(lvl * 0.08, 0.40),
+  },
 ];
 
 export function getUpgradeDef(id) {
