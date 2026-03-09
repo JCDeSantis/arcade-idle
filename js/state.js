@@ -101,7 +101,7 @@ export function setPrestigeUpgrade(id, owned) {
   emit('prestige-upgrade:change', { id, owned });
 }
 
-export function recordGameResult(gameId, score) {
+export function recordGameResult(gameId, score, rateMultiplier = 1) {
   const g = state.games[gameId];
   if (!g) return;
   if (score > g.bestScore) g.bestScore = score;
@@ -109,8 +109,8 @@ export function recordGameResult(gameId, score) {
   if (g.recentScores.length > 5) g.recentScores.shift();
   g.totalRuns++;
 
-  // Mastery gain: diminishing returns
-  const gain = Math.max(0.5, 5 * (1 - g.mastery / 100));
+  // Mastery gain: diminishing returns, scaled by upgrade
+  const gain = Math.max(0.5, 5 * (1 - g.mastery / 100)) * rateMultiplier;
   g.mastery = Math.min(100, g.mastery + gain);
 
   emit('game:result', { gameId, score, mastery: g.mastery });

@@ -32,7 +32,8 @@ export function submitResult(gameId, score) {
   if (td > 0) addCurrency('trainingData', td);
 
   // Update mastery + recent scores
-  recordGameResult(gameId, score);
+  const masteryRateMult = getUpgradeValue(`${gameId}_mastery_rate`);
+  recordGameResult(gameId, score, masteryRateMult);
   const masteryGain = state.games[gameId].mastery - prevMastery;
 
   emit('session:end', { gameId, score, bits, td, masteryGain });
