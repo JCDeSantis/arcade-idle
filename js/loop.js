@@ -1,6 +1,6 @@
 // js/loop.js — main tick system
 
-import { state, addCurrency, unlockStage2, emit } from './state.js';
+import { state, addCurrency, unlockStage2, unlockStage3, emit } from './state.js';
 import { getTotalAutoRate } from './automation.js';
 import { saveGame } from './save.js';
 
@@ -37,6 +37,11 @@ function tick() {
   // Stage 2 unlock check
   if (state.stage < 2 && state.currencies.lifetimeBits >= 50000) {
     unlockStage2();
+  }
+
+  // Stage 3 unlock check
+  if (state.stage < 3 && state.currencies.lifetimeBits >= 200000) {
+    unlockStage3();
   }
 
   emit('tick', { delta, rate });
