@@ -1,6 +1,7 @@
 // js/games/paddle.js — Breakout-style canvas mini-game
 
 import { submitResult, showResults } from './base-game.js';
+import { getUpgradeValue } from '../upgrades.js';
 
 const CANVAS_W = 480;
 const CANVAS_H = 420;
@@ -88,6 +89,13 @@ export function launchPaddle(onExit) {
 }
 
 function initGame() {
+  const ballSpeedMult  = getUpgradeValue('paddle_ball_speed');    // 1.0 at lvl 0
+  const paddleSizeMult = getUpgradeValue('paddle_size');          // 1.0 at lvl 0
+  const dropChance     = getUpgradeValue('paddle_powerup_chance'); // 0.0 at lvl 0 (raw probability)
+
+  const baseSpeed   = 220 * ballSpeedMult;
+  const basePaddleW = Math.round(80 * paddleSizeMult);
+
   const blocks = [];
   for (let row = 0; row < ROWS; row++) {
     for (let col = 0; col < COLS; col++) {
@@ -107,22 +115,22 @@ function initGame() {
     elapsed:  0,
     combo:    0,
     blocks:   blocks,
-    paddleW:  80,
-    paddleX:  CANVAS_W / 2 - 40,
+    paddleW:  basePaddleW,
+    paddleX:  CANVAS_W / 2 - basePaddleW / 2,
     paddleY:  CANVAS_H - 28,
     balls: [{
       x: CANVAS_W / 2,
       y: CANVAS_H / 2,
       r: 7,
-      vx: 220 * (Math.random() > 0.5 ? 1 : -1),
-      vy: -220,
+      vx: baseSpeed * (Math.random() > 0.5 ? 1 : -1),
+      vy: -baseSpeed,
     }],
     drops: [],
     activeEffects: {},
     shieldActive: false,
     stickyBall: null,
-    dropChance: 0,
-    effectivePaddleW: 80,
+    dropChance,
+    effectivePaddleW: basePaddleW,
     _keys: {},
   };
 }
