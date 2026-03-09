@@ -4,6 +4,7 @@ import { loadSave }  from './save.js';
 import { startLoop } from './loop.js';
 import { initHUD }   from './ui/hud.js';
 import { initHub }   from './ui/hub.js';
+import './prestige.js'; // ensure prestige module is loaded
 
 function main() {
   initState();
