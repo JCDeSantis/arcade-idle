@@ -118,3 +118,91 @@ export function catchPowerup(game, drop) {
     }
   }
 }
+
+/**
+ * Draw falling capsules and the active-effects HUD strip.
+ */
+export function renderPowerups(ctx, game) {
+  // Draw falling capsules
+  for (const drop of game.drops) {
+    const { color, icon } = drop.def;
+    const x = drop.x - CAPSULE_W / 2;
+    const y = drop.y - CAPSULE_H / 2;
+
+    ctx.save();
+    ctx.shadowColor  = color;
+    ctx.shadowBlur   = 8;
+    ctx.strokeStyle  = color;
+    ctx.lineWidth    = 1.5;
+    ctx.fillStyle    = color + '33';
+    _roundRect(ctx, x, y, CAPSULE_W, CAPSULE_H, 4);
+    ctx.fill();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    ctx.fillStyle  = '#ffffff';
+    ctx.font       = '10px "Space Mono", monospace';
+    ctx.textAlign  = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(icon, drop.x, drop.y);
+    ctx.restore();
+  }
+
+  // Active effects HUD strip — just above the paddle
+  const hudY = game.paddleY - 20;
+  let hudX   = 8;
+  const ae   = game.activeEffects;
+
+  for (const def of POWERUP_DEFS) {
+    const t = ae[def.id];
+    if (!t || t <= 0) continue; // skip instant / inactive
+
+    ctx.save();
+    ctx.fillStyle    = def.color + '22';
+    ctx.strokeStyle  = def.color;
+    ctx.lineWidth    = 1;
+    ctx.shadowColor  = def.color;
+    ctx.shadowBlur   = 4;
+    _roundRect(ctx, hudX, hudY - 10, 42, 14, 3);
+    ctx.fill();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    ctx.fillStyle    = def.color;
+    ctx.font         = '9px "Space Mono", monospace';
+    ctx.textAlign    = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${def.icon} ${t.toFixed(0)}s`, hudX + 3, hudY - 3);
+    ctx.restore();
+
+    hudX += 48;
+  }
+
+  // Shield indicator: glowing line at bottom of canvas
+  if (game.shieldActive) {
+    ctx.save();
+    ctx.strokeStyle = '#4488ff';
+    ctx.lineWidth   = 2;
+    ctx.shadowColor = '#4488ff';
+    ctx.shadowBlur  = 10;
+    ctx.beginPath();
+    ctx.moveTo(0, game.paddleY + 18);
+    ctx.lineTo(480, game.paddleY + 18); // CANVAS_W
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function _roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
