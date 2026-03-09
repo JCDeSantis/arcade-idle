@@ -128,6 +128,7 @@ function initGame() {
 }
 
 function update(g, dt) {
+  // activeEffects values are positive durations (seconds); 0 or absent = inactive
   const SPEED_SCALE = (1 + g.elapsed / SESSION_SECS * 0.6)
     * (g.activeEffects.slow_mo > 0 ? 0.5 : 1);
 
@@ -301,7 +302,7 @@ function render(ctx, g) {
   }
 
   // Paddle
-  const px = g.paddleX, py = g.paddleY, pw = g.effectivePaddleW ?? g.paddleW;
+  const px = g.paddleX, py = g.paddleY, pw = g.effectivePaddleW;
   ctx.fillStyle = '#00ffff22';
   ctx.fillRect(px, py, pw, 12);
   ctx.strokeStyle = '#00ffff';
@@ -352,6 +353,7 @@ function circleRect(b, r) {
   return dx * dx + dy * dy < b.r * b.r;
 }
 
+// stickyBall.ball must be a member of g.balls — ensured by catchPowerup in powerups.js
 function releaseStickyBall(g) {
   if (!g.stickyBall) return;
   const b = g.stickyBall.ball;
