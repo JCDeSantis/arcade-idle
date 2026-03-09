@@ -3,6 +3,7 @@
 import { state, addCurrency, recordGameResult, emit } from '../state.js';
 import { rollingAvg } from '../utils.js';
 import { getUpgradeValue } from '../upgrades.js';
+import { popParticles } from '../ui/particles.js';
 
 /**
  * Call at the end of a mini-game session.
@@ -66,6 +67,7 @@ export function showResults(gameId, score, rewards, onDismiss) {
   `;
 
   document.getElementById('game-overlay').appendChild(overlay);
+  popParticles(window.innerWidth / 2, window.innerHeight / 3, '#00ffff', 20);
   overlay.querySelector('.result-btn').addEventListener('click', () => {
     overlay.remove();
     onDismiss();

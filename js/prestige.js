@@ -1,6 +1,7 @@
 // js/prestige.js — prestige logic
 
 import { state, addCurrency, spendCurrency, setPrestigeUpgrade, createDefaultState, emit } from './state.js';
+import { prestigeBurst } from './ui/particles.js';
 
 export const PRESTIGE_UPGRADES = [
   {
@@ -79,6 +80,7 @@ export function doPrestige() {
   state.prestige.lifetimeBits += nc; // accumulate lifetime NC context
 
   emit('prestige', { nc, count: state.prestige.count });
+  prestigeBurst();
   return true;
 }
 
