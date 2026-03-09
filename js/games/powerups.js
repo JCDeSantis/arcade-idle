@@ -50,7 +50,7 @@ export function updatePowerups(game, dt, CANVAS_H) {
       drop.x + CAPSULE_W / 2 > px &&
       drop.x - CAPSULE_W / 2 < px + pw &&
       drop.y + CAPSULE_H / 2 > py &&
-      drop.y - CAPSULE_H / 2 < py + 12
+      drop.y - CAPSULE_H / 2 < py + 12 // 12 = paddle height (matches paddle.js)
     ) {
       caught.push(drop);
       return false;
