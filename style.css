@@ -165,11 +165,39 @@ body {
   color: var(--text-dim);
 }
 
+.game-card:not(.locked)::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, #00ffff08, transparent 60%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.game-card:not(.locked):hover::before {
+  opacity: 1;
+}
+
 .game-card .card-lock-msg {
   font-size: 0.6rem;
   color: var(--text-dim);
   text-align: center;
   padding: 0 10px;
+}
+
+.hub-title {
+  font-size: 0.65rem;
+  letter-spacing: 5px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.hub-prestige-badge {
+  font-size: 0.6rem;
+  color: var(--green);
+  letter-spacing: 2px;
+  text-shadow: var(--glow-green);
 }
 
 /* ── Hub Nav Tabs ───────────────────────────────────────── */
@@ -349,6 +377,23 @@ body {
   box-shadow: var(--glow-magenta);
   border-radius: 3px;
   transition: width 0.5s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.mastery-bar-fill::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0%   { left: -100%; }
+  100% { left: 200%; }
 }
 
 .mastery-pct {
@@ -516,6 +561,13 @@ body {
   font-weight: 700;
   color: var(--cyan);
   text-shadow: var(--glow-cyan);
+  animation: scorePulse 0.5s ease;
+}
+
+@keyframes scorePulse {
+  0%   { transform: scale(0.8); opacity: 0; }
+  60%  { transform: scale(1.08); }
+  100% { transform: scale(1); opacity: 1; }
 }
 
 .result-rewards {

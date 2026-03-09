@@ -25,6 +25,8 @@ function renderHub() {
       ${gameCard('paddle', '🎮', 'PADDLE')}
       ${gameCard('target', '🎯', 'TARGET')}
     </div>
+    <div class="hub-title">AI TRAINING ARCADE</div>
+    ${state.prestige.count > 0 ? `<div class="hub-prestige-badge">PRESTIGE ${state.prestige.count}</div>` : ''}
     <div class="hub-tabs">
       <button class="hub-tab" data-panel="upgrades">UPGRADES</button>
       <button class="hub-tab" data-panel="automation">AUTOMATION</button>
