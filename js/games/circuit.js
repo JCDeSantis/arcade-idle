@@ -101,6 +101,7 @@ export function launchCircuit(onExit) {
 // ── Game initialisation ───────────────────────────────────
 
 function initGame() {
+  _nodeId = 0;
   const nodeLifetimeMult = getUpgradeValue('circuit_node_lifetime'); // 1.0 at lvl 0
   const chainBonus       = getUpgradeValue('circuit_chain_bonus');   // 0 at lvl 0 (raw level)
   const powerupRate      = getUpgradeValue('circuit_powerup_chance');// 0.0 at lvl 0
