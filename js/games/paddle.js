@@ -2,6 +2,7 @@
 
 import { submitResult, showResults } from './base-game.js';
 import { getUpgradeValue } from '../upgrades.js';
+import { spawnPowerup, updatePowerups, renderPowerups } from './powerups.js';
 
 const CANVAS_W = 480;
 const CANVAS_H = 420;
@@ -64,6 +65,10 @@ export function launchPaddle(onExit) {
       e.clientX - rect.left - (game.effectivePaddleW ?? game.paddleW) / 2,
       0, CANVAS_W - (game.effectivePaddleW ?? game.paddleW)
     );
+  });
+
+  canvas.addEventListener('click', () => {
+    if (game.stickyBall) releaseStickyBall(game);
   });
 
   // Keyboard control
@@ -194,6 +199,7 @@ function update(g, dt) {
     });
   }
   g.balls = survivingBalls;
+  updatePowerups(g, dt, CANVAS_H);
 }
 
 function updateBall(g, b, dt, SPEED_SCALE) {
@@ -352,6 +358,8 @@ function render(ctx, g) {
     ctx.textAlign = 'right';
     ctx.fillText(`×${g.combo} COMBO`, CANVAS_W - 10, CANVAS_H - 10);
   }
+
+  renderPowerups(ctx, g);
 }
 
 function circleRect(b, r) {
@@ -371,8 +379,6 @@ function releaseStickyBall(g) {
   g.stickyBall = null;
 }
 
-// Placeholder — replaced by real import in Task 7
-function spawnPowerup(block) { return null; }
 
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
