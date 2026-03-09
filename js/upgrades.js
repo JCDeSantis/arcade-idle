@@ -103,7 +103,7 @@ export const UPGRADES = [
     id: 'paddle_size',
     name: 'Paddle Expander',
     desc: 'Paddle is +15% wider per level',
-    icon: '↔',
+    icon: '📏',
     currency: 'bits',
     baseCost: 200,
     costScale: 2.5,
@@ -119,7 +119,7 @@ export const UPGRADES = [
     baseCost: 30,
     costScale: 2.2,
     maxLevel: 5,
-    effect: lvl => Math.min(lvl * 0.08, 0.40),
+    effect: lvl => Math.min(lvl * 0.08, 0.40), // raw drop probability (not a multiplier)
   },
 ];
 
