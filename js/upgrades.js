@@ -121,6 +121,73 @@ export const UPGRADES = [
     maxLevel: 5,
     effect: lvl => Math.min(lvl * 0.08, 0.40), // raw drop probability (not a multiplier)
   },
+  // ── Circuit gameplay upgrades ─────────────────────────
+  {
+    id: 'circuit_bit_mult',
+    name: 'Data Siphon',
+    desc: 'Circuit sessions earn +25% Bits per level',
+    icon: '🔌',
+    currency: 'bits',
+    baseCost: 150,
+    costScale: 2.5,
+    maxLevel: 10,
+    effect: lvl => 1 + lvl * 0.25,
+  },
+  {
+    id: 'circuit_td_mult',
+    name: 'Signal Mapper',
+    desc: 'Circuit sessions earn +30% Training Data per level',
+    icon: '📶',
+    currency: 'trainingData',
+    baseCost: 30,
+    costScale: 2.2,
+    maxLevel: 8,
+    effect: lvl => 1 + lvl * 0.30,
+  },
+  {
+    id: 'circuit_mastery_rate',
+    name: 'Fast Routing',
+    desc: 'Circuit mastery grows 20% faster per level',
+    icon: '🔀',
+    currency: 'bits',
+    baseCost: 500,
+    costScale: 3,
+    maxLevel: 5,
+    effect: lvl => 1 + lvl * 0.20,
+  },
+  {
+    id: 'circuit_node_lifetime',
+    name: 'Extended Window',
+    desc: 'Circuit nodes live +15% longer per level',
+    icon: '⏳',
+    currency: 'bits',
+    baseCost: 250,
+    costScale: 2.6,
+    maxLevel: 5,
+    effect: lvl => 1 + lvl * 0.15,
+  },
+  {
+    id: 'circuit_chain_bonus',
+    name: 'Overclock Chain',
+    desc: 'Chain multiplier thresholds activate 1 node sooner per level',
+    icon: '⛓',
+    currency: 'bits',
+    baseCost: 400,
+    costScale: 3,
+    maxLevel: 2,
+    effect: lvl => lvl, // raw level (0, 1, or 2) — used directly as threshold offset
+  },
+  {
+    id: 'circuit_powerup_chance',
+    name: 'Loot Splice',
+    desc: '+10% power-up node spawn rate per level',
+    icon: '🎲',
+    currency: 'trainingData',
+    baseCost: 25,
+    costScale: 2.2,
+    maxLevel: 5,
+    effect: lvl => lvl * 0.10, // raw rate modifier (not a multiplier)
+  },
 ];
 
 export function getUpgradeDef(id) {
@@ -167,6 +234,7 @@ export function purchaseUpgrade(id) {
 export function getVisibleUpgrades() {
   return UPGRADES.filter(u => {
     if (u.id.startsWith('target_') && !state.games.target.unlocked) return false;
+    if (u.id.startsWith('circuit_') && !state.games.circuit.unlocked) return false;
     if (u.id === 'prestige_bonus' && state.stage < 2) return false;
     return true;
   });
