@@ -140,7 +140,7 @@ function generateGraph(nodeLifetimeMult) {
         x = clamp(cx + rand(-cellW * 0.35, cellW * 0.35), NODE_R + 10, CANVAS_W - NODE_R - 10);
         y = clamp(cy + rand(-cellH * 0.35, cellH * 0.35), NODE_R + 10, CANVAS_H - NODE_R - 10);
         attempts++;
-      } while (attempts < 10 && positions.some(p => nodeDist(p, { x, y }) < MIN_NODE_DIST));
+      } while (attempts < 50 && positions.some(p => nodeDist(p, { x, y }) < MIN_NODE_DIST));
       positions.push({ x, y });
     }
   }
@@ -293,10 +293,14 @@ function removeNode(game, node) {
 function graftNode(game, isPowerup, powerupDef = null) {
   if (game.nodes.length === 0) return;
   const anchor = game.nodes[randInt(0, game.nodes.length - 1)];
-  const angle  = rand(0, Math.PI * 2);
-  const d      = rand(80, 130);
-  const x = clamp(anchor.x + Math.cos(angle) * d, NODE_R + 10, CANVAS_W - NODE_R - 10);
-  const y = clamp(anchor.y + Math.sin(angle) * d, NODE_R + 10, CANVAS_H - NODE_R - 10);
+  let x, y, attempts = 0;
+  do {
+    const angle = rand(0, Math.PI * 2);
+    const d     = rand(80, 130);
+    x = clamp(anchor.x + Math.cos(angle) * d, NODE_R + 10, CANVAS_W - NODE_R - 10);
+    y = clamp(anchor.y + Math.sin(angle) * d, NODE_R + 10, CANVAS_H - NODE_R - 10);
+    attempts++;
+  } while (attempts < 20 && game.nodes.some(n => nodeDist(n, { x, y }) < MIN_NODE_DIST));
 
   const newNode = makeNode(x, y, game.nodeLifetimeMult, isPowerup, powerupDef);
   newNode.edges.push(anchor);
@@ -370,6 +374,10 @@ function scoreChain(game) {
     const label = mult > 1 ? `+${total} ×${mult}` : `+${total}`;
     addPopup(game, cx, cy, label, '#e89830');
   }
+
+  // Regenerate the board — fresh node layout and edges after each harvest
+  game.nodes = generateGraph(game.nodeLifetimeMult);
+  game.replenishTimer = REPLENISH_INTERVAL;
 }
 
 function clearDrag(game) {
