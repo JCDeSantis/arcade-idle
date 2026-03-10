@@ -180,7 +180,7 @@ export const UPGRADES = [
   {
     id: 'circuit_powerup_chance',
     name: 'Loot Splice',
-    desc: 'Power-up nodes graft into the circuit more often per level',
+    desc: 'Power-up nodes graft into the circuit 10% more often per level',
     icon: '🎲',
     currency: 'trainingData',
     baseCost: 25,
