@@ -1,0 +1,39 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Package game files
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          ZIP="arcade-idle-${VERSION}.zip"
+          zip -r "$ZIP" index.html style.css js/ --exclude "js/**/*.test.js"
+          echo "ZIP=$ZIP" >> $GITHUB_ENV
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Arcade Idle ${{ github.ref_name }}"
+          body: |
+            ## How to Play
+
+            1. Download `arcade-idle-${{ github.ref_name }}.zip` below
+            2. Unzip it
+            3. Serve with a local HTTP server:
+               ```
+               python -m http.server 8080
+               ```
+            4. Open `http://localhost:8080`
+          files: ${{ env.ZIP }}
