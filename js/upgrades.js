@@ -158,7 +158,7 @@ export const UPGRADES = [
   {
     id: 'circuit_node_lifetime',
     name: 'Extended Window',
-    desc: 'Circuit nodes live +15% longer per level',
+    desc: 'Circuit nodes charge 15% slower per level',
     icon: '⏳',
     currency: 'bits',
     baseCost: 250,
@@ -180,7 +180,7 @@ export const UPGRADES = [
   {
     id: 'circuit_powerup_chance',
     name: 'Loot Splice',
-    desc: '+10% power-up node spawn rate per level',
+    desc: 'Power-up nodes graft into the circuit more often per level',
     icon: '🎲',
     currency: 'trainingData',
     baseCost: 25,
