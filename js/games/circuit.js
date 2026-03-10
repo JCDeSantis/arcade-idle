@@ -145,7 +145,7 @@ function generateGraph(nodeLifetimeMult) {
     }
   }
 
-  const nodes = positions.map(p => makeNode(p.x, p.y, nodeLifetimeMult));
+  const nodes = positions.slice(0, NODE_COUNT).map(p => makeNode(p.x, p.y, nodeLifetimeMult));
 
   // Connect edges: each node → nearest neighbors within MAX_EDGE_DIST, capped at MAX_EDGES_PER_NODE
   for (let i = 0; i < nodes.length; i++) {
@@ -234,6 +234,8 @@ function update(game, dt) {
   }
 
   // Check overloads (snapshot first to avoid mutation during iteration)
+  // !n.inChain guard is a safety invariant: prevents removeNode() from being called on in-chain nodes,
+  // which would corrupt the drag state. Do not remove this guard.
   const overloaded = game.nodes.filter(n => n.charge >= 1 && !n.inChain);
   for (const node of overloaded) {
     triggerOverload(game, node);
@@ -279,7 +281,9 @@ function removeNode(game, node) {
     neighbor.edges = neighbor.edges.filter(e => e !== node);
   }
   game.nodes = game.nodes.filter(n => n !== node);
-  // If this node was in the drag chain, end the drag
+  // If this node is being dragged, score and clear the chain now.
+  // scoreChain is safe to call here because JS is single-threaded —
+  // the endDrag handler cannot fire while update() is running.
   if (game.drag.chain.includes(node)) {
     scoreChain(game);
     clearDrag(game);
@@ -397,7 +401,7 @@ function activatePowerup(game, def) {
 
     case 'stabilize':
       for (const node of game.nodes) {
-        node.charge = Math.max(0, node.charge - 0.3);
+        if (!node.inChain) node.charge = Math.max(0, node.charge - 0.3);
       }
       addPopup(game, CANVAS_W / 2, CANVAS_H / 2 - 20, 'STABILIZED', '#38d4d4');
       break;
@@ -443,7 +447,7 @@ function render(ctx, game) {
   const drawnEdges = new Set();
   for (const node of game.nodes) {
     for (const neighbor of node.edges) {
-      const key = [node.id, neighbor.id].sort().join('-');
+      const key = Math.min(node.id, neighbor.id) * 10000 + Math.max(node.id, neighbor.id);
       if (drawnEdges.has(key)) continue;
       drawnEdges.add(key);
 
