@@ -1,25 +1,26 @@
-// js/games/circuit.js — node-chain drag mini-game
+// js/games/circuit.js — charge-graph edge-routing mini-game (v2)
 
 import { submitResult, showResults } from './base-game.js';
 import { getUpgradeValue } from '../upgrades.js';
 
-const CANVAS_W    = 480;
-const CANVAS_H    = 420;
-const SESSION_SECS = 40;
+const CANVAS_W = 480;
+const CANVAS_H = 420;
+const SESSION_SECS = 45;
 
-// Node spawn interval range (seconds) — ramps from BASE → MIN over session
-const SPAWN_INTERVAL_BASE = 1.8;
-const SPAWN_INTERVAL_MIN  = 0.9;
+const NODE_COUNT     = 14;
+const NODE_R         = 18;       // visual radius
+const SNAP_R         = NODE_R + 12; // neighbor-hop snap radius
+const MIN_NODE_DIST  = 50;       // minimum distance between nodes
+const MAX_EDGE_DIST  = 165;      // max distance to form an edge
+const MAX_EDGES_PER_NODE = 4;
 
-// Node properties
-const NODE_R_MIN       = 14;
-const NODE_R_MAX       = 20;
-const NODE_LIFE_MIN    = 12;  // seconds, before upgrade
-const NODE_LIFE_MAX    = 18;
-const NODE_VAL_MIN     = 10;
-const NODE_VAL_MAX     = 30;
-const PENALTY_PTS      = 20;
-const POWERUP_INTERVAL = 15; // seconds between power-up node spawns (base)
+const CHARGE_RATE_MIN  = 1 / 14; // full charge in 14s
+const CHARGE_RATE_MAX  = 1 / 8;  // full charge in 8s
+const CASCADE_BONUS    = 0.25;   // charge added to neighbors on overload
+const OVERLOAD_PENALTY = 30;
+
+const REPLENISH_INTERVAL = 10;   // seconds between new node grafts
+const POWERUP_INTERVAL   = 15;   // seconds between power-up node spawns
 
 export function launchCircuit(onExit) {
   const overlay = createOverlay('CIRCUIT.EXE');
@@ -62,70 +63,152 @@ export function launchCircuit(onExit) {
     });
   }
 
-  // Drag handlers
   canvas.addEventListener('mousedown', e => {
     const { x, y } = canvasPos(canvas, e);
+    const hit = nodeAt(game, x, y);
+    if (!hit) return;
     game.drag.active   = true;
-    game.drag.path     = [{ x, y }];
-    game.drag.captured = [];
+    game.drag.chain    = [hit];
+    game.drag.lastPos  = { x, y };
+    hit.inChain        = true;
   });
 
   canvas.addEventListener('mousemove', e => {
     if (!game.drag.active) return;
     const { x, y } = canvasPos(canvas, e);
-    game.drag.path.push({ x, y });
-    captureDragNodes(game, x, y);
+    game.drag.lastPos = { x, y };
+    extendChain(game, x, y);
   });
 
-  canvas.addEventListener('mouseup', () => {
+  const endDrag = () => {
     if (!game.drag.active) return;
     scoreChain(game);
-    game.drag.active   = false;
-    game.drag.path     = [];
-    game.drag.captured = [];
-  });
-
-  // Cancel drag if mouse leaves canvas
-  canvas.addEventListener('mouseleave', () => {
-    if (!game.drag.active) return;
-    scoreChain(game);
-    game.drag.active   = false;
-    game.drag.path     = [];
-    game.drag.captured = [];
-  });
+    clearDrag(game);
+  };
+  canvas.addEventListener('mouseup',    endDrag);
+  canvas.addEventListener('mouseleave', endDrag);
 
   animId = requestAnimationFrame(loop);
   document.getElementById('app').appendChild(overlay);
 }
 
-// ── Game initialisation ───────────────────────────────────
+// ── Game initialisation ────────────────────────────────────
+
+let _nodeId = 0;
 
 function initGame() {
   _nodeId = 0;
-  const nodeLifetimeMult = getUpgradeValue('circuit_node_lifetime'); // 1.0 at lvl 0
+  const nodeLifetimeMult = getUpgradeValue('circuit_node_lifetime'); // 1.0 at lvl 0 → charges slower
   const chainBonus       = getUpgradeValue('circuit_chain_bonus');   // 0 at lvl 0 (raw level)
   const powerupRate      = getUpgradeValue('circuit_powerup_chance');// 0.0 at lvl 0
 
   return {
-    score:        0,
-    elapsed:      0,
-    bonusTime:    0,       // seconds added by +TIME power-up
-    nodes:        [],      // live nodes (regular + power-up)
+    score:          0,
+    elapsed:        0,
+    bonusTime:      0,
+    nodes:          generateGraph(nodeLifetimeMult),
     drag: {
-      active:    false,
-      path:      [],       // [{x, y}] cursor positions this drag
-      captured:  [],       // node objects captured this drag
+      active:   false,
+      chain:    [],       // node refs in current chain
+      lastPos:  null,
     },
-    activeEffects:  {},    // { effectId: timeRemaining (s) }; 0/absent = inactive
-    shieldCharges:  0,     // remaining no_penalty charges
-    popups:         [],    // { x, y, text, life, maxLife, color }
-    spawnTimer:     0,     // seconds until next regular node spawn
-    powerupTimer:   POWERUP_INTERVAL * (1 - powerupRate), // adjusted spawn interval
+    activeEffects:  {},   // { effectId: timeRemaining }
+    popups:         [],   // { x, y, text, color, life, maxLife }
+    replenishTimer: REPLENISH_INTERVAL,
+    powerupTimer:   POWERUP_INTERVAL * Math.max(0.4, 1 - powerupRate),
     nodeLifetimeMult,
     chainBonus,
     powerupRate,
   };
 }
+
+// ── Graph generation ──────────────────────────────────────
+
+function generateGraph(nodeLifetimeMult) {
+  // Place 14 nodes on a loose 4×4 grid with jitter
+  const cols = 4, rows = 4;
+  const cellW = CANVAS_W / cols;
+  const cellH = CANVAS_H / rows;
+  const positions = [];
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const cx = cellW * c + cellW / 2;
+      const cy = cellH * r + cellH / 2;
+      let x, y, attempts = 0;
+      do {
+        x = clamp(cx + rand(-cellW * 0.35, cellW * 0.35), NODE_R + 10, CANVAS_W - NODE_R - 10);
+        y = clamp(cy + rand(-cellH * 0.35, cellH * 0.35), NODE_R + 10, CANVAS_H - NODE_R - 10);
+        attempts++;
+      } while (attempts < 10 && positions.some(p => nodeDist(p, { x, y }) < MIN_NODE_DIST));
+      positions.push({ x, y });
+    }
+  }
+
+  const nodes = positions.map(p => makeNode(p.x, p.y, nodeLifetimeMult));
+
+  // Connect edges: each node → nearest neighbors within MAX_EDGE_DIST, capped at MAX_EDGES_PER_NODE
+  for (let i = 0; i < nodes.length; i++) {
+    const a = nodes[i];
+    const candidates = nodes
+      .filter((_, j) => j !== i)
+      .map(b => ({ node: b, d: nodeDist(a, b) }))
+      .filter(({ d }) => d < MAX_EDGE_DIST)
+      .sort((x, y) => x.d - y.d);
+
+    for (const { node: b } of candidates) {
+      if (a.edges.length >= MAX_EDGES_PER_NODE) break;
+      if (b.edges.length >= MAX_EDGES_PER_NODE) continue;
+      if (!a.edges.includes(b)) {
+        a.edges.push(b);
+        b.edges.push(a);
+      }
+    }
+  }
+
+  // Ensure connectivity: isolated nodes connect to nearest
+  for (const node of nodes) {
+    if (node.edges.length === 0) {
+      const nearest = nodes
+        .filter(b => b !== node)
+        .sort((a, b) => nodeDist(node, a) - nodeDist(node, b))[0];
+      node.edges.push(nearest);
+      nearest.edges.push(node);
+    }
+  }
+
+  return nodes;
+}
+
+function makeNode(x, y, nodeLifetimeMult, isPowerup = false, powerupDef = null) {
+  // Higher nodeLifetimeMult = slower charge rate
+  const baseRate = rand(CHARGE_RATE_MIN, CHARGE_RATE_MAX);
+  const rate     = isPowerup
+    ? CHARGE_RATE_MAX * 1.5            // power-ups charge faster (more urgent)
+    : baseRate / Math.max(1, nodeLifetimeMult);
+  return {
+    id:         _nodeId++,
+    x, y,
+    charge:     0,          // 0.0 – 1.0
+    chargeRate: rate,
+    value:      isPowerup ? 0 : randInt(10, 30),
+    edges:      [],
+    isPowerup,
+    powerupDef,
+    inChain:    false,
+  };
+}
+
+// ── Power-up definitions ──────────────────────────────────
+
+const POWERUP_DEFS = [
+  { id: 'stabilize',     label: '📉', color: '#38d4d4', duration: 0 }, // instant
+  { id: 'amplify',       label: '★',  color: '#e89830', duration: 8 },
+  { id: 'freeze',        label: '❄',  color: '#38d4d4', duration: 6 },
+  { id: 'reinforce',     label: '🔒', color: '#3ecb7c', duration: 8 },
+  { id: 'surge_harvest', label: '⚡', color: '#e04ca0', duration: 0 }, // instant
+  { id: 'extend',        label: '+T', color: '#3ecb7c', duration: 0 }, // instant
+];
 
 // ── Update ────────────────────────────────────────────────
 
@@ -138,43 +221,37 @@ function update(game, dt) {
     }
   }
 
-  const frozen = game.activeEffects.freeze > 0;
-  const slowSpawn = game.activeEffects.slow_spawn > 0;
+  const frozen     = game.activeEffects.freeze    > 0;
+  const reinforced = game.activeEffects.reinforce  > 0;
 
-  // Spawn regular nodes
-  const spawnRate = spawnInterval(game.elapsed);
-  game.spawnTimer -= dt;
-  if (game.spawnTimer <= 0) {
-    game.nodes.push(makeNode(game));
-    game.spawnTimer = slowSpawn ? spawnRate * 2 : spawnRate;
+  // Charge nodes
+  if (!frozen) {
+    const chargeScale = reinforced ? 0.5 : 1;
+    for (const node of game.nodes) {
+      if (node.inChain) continue;
+      node.charge = Math.min(1, node.charge + node.chargeRate * dt * chargeScale);
+    }
+  }
+
+  // Check overloads (snapshot first to avoid mutation during iteration)
+  const overloaded = game.nodes.filter(n => n.charge >= 1 && !n.inChain);
+  for (const node of overloaded) {
+    triggerOverload(game, node);
+  }
+
+  // Replenish network
+  game.replenishTimer -= dt;
+  if (game.replenishTimer <= 0 && game.nodes.length < NODE_COUNT + 2) {
+    graftNode(game, false);
+    game.replenishTimer = REPLENISH_INTERVAL;
   }
 
   // Spawn power-up node
   game.powerupTimer -= dt;
   if (game.powerupTimer <= 0) {
-    game.nodes.push(makePowerupNode(game));
-    game.powerupTimer = POWERUP_INTERVAL * (1 - game.powerupRate);
+    graftPowerupNode(game);
+    game.powerupTimer = POWERUP_INTERVAL * Math.max(0.4, 1 - game.powerupRate);
   }
-
-  // Age nodes + check expiry
-  const surviving = [];
-  for (const node of game.nodes) {
-    if (node.captured) { surviving.push(node); continue; }
-    if (!frozen) node.lifetime -= dt;
-    if (node.lifetime <= 0) {
-      // Expired
-      if (node.isPowerup) continue; // power-ups just disappear silently
-      if (game.shieldCharges > 0) {
-        game.shieldCharges--;
-      } else {
-        game.score = Math.max(0, game.score - PENALTY_PTS);
-        addPopup(game, node.x, node.y, `-${PENALTY_PTS}`, '#e04ca0');
-      }
-    } else {
-      surviving.push(node);
-    }
-  }
-  game.nodes = surviving;
 
   // Age popups
   game.popups = game.popups.filter(p => {
@@ -183,118 +260,125 @@ function update(game, dt) {
   });
 }
 
-// ── Node factory ─────────────────────────────────────────
-
-let _nodeId = 0;
-function makeNode(game) {
-  const r    = randInt(NODE_R_MIN, NODE_R_MAX);
-  const life = rand(NODE_LIFE_MIN, NODE_LIFE_MAX) * game.nodeLifetimeMult;
-  return {
-    id:          _nodeId++,
-    x:           rand(r + 10, CANVAS_W - r - 10),
-    y:           rand(r + 10, CANVAS_H - r - 10),
-    r,
-    lifetime:    life,
-    maxLifetime: life,
-    value:       randInt(NODE_VAL_MIN, NODE_VAL_MAX),
-    isPowerup:   false,
-    powerupDef:  null,
-    captured:    false,
-    capturedFraction: 0, // lifetime fraction remaining when captured
-  };
+function triggerOverload(game, node) {
+  // Cascade charge to neighbors
+  for (const neighbor of node.edges) {
+    if (!neighbor.inChain) {
+      neighbor.charge = Math.min(1, neighbor.charge + CASCADE_BONUS);
+    }
+  }
+  // Penalty + popup
+  game.score = Math.max(0, game.score - OVERLOAD_PENALTY);
+  addPopup(game, node.x, node.y - NODE_R - 10, `ARC! -${OVERLOAD_PENALTY}`, '#e04ca0');
+  removeNode(game, node);
 }
 
-// ── Power-up definitions ──────────────────────────────────
-
-const POWERUP_DEFS = [
-  { id: 'freeze',      label: '❄',  color: '#38d4d4', duration:  6 },
-  { id: 'magnet',      label: '🧲', color: '#3ecb7c', duration:  8 },
-  { id: 'score_mult',  label: '★',  color: '#e89830', duration:  8 },
-  { id: 'surge',       label: '⚡', color: '#e04ca0', duration:  0 }, // instant
-  { id: 'slow_spawn',  label: '🐢', color: '#38d4d4', duration:  8 },
-  { id: 'bonus_nodes', label: '💰', color: '#e89830', duration:  0 }, // instant
-  { id: 'no_penalty',  label: '🛡', color: '#38d4d4', duration: -2 }, // -2 = charge-based
-  { id: 'extend',      label: '+T', color: '#3ecb7c', duration:  0 }, // instant
-];
-
-function makePowerupNode(game) {
-  const def  = POWERUP_DEFS[randInt(0, POWERUP_DEFS.length - 1)];
-  const r    = 16;
-  const life = 8 * game.nodeLifetimeMult;
-  return {
-    id:          _nodeId++,
-    x:           rand(r + 10, CANVAS_W - r - 10),
-    y:           rand(r + 10, CANVAS_H - r - 10),
-    r,
-    lifetime:    life,
-    maxLifetime: life,
-    value:       0,        // power-ups have no point value
-    isPowerup:   true,
-    powerupDef:  def,
-    captured:    false,
-    capturedFraction: 0,
-  };
+function removeNode(game, node) {
+  // Disconnect from all neighbors
+  for (const neighbor of node.edges) {
+    neighbor.edges = neighbor.edges.filter(e => e !== node);
+  }
+  game.nodes = game.nodes.filter(n => n !== node);
+  // If this node was in the drag chain, end the drag
+  if (game.drag.chain.includes(node)) {
+    scoreChain(game);
+    clearDrag(game);
+  }
 }
 
-// ── Drag capture ──────────────────────────────────────────
+function graftNode(game, isPowerup, powerupDef = null) {
+  if (game.nodes.length === 0) return;
+  const anchor = game.nodes[randInt(0, game.nodes.length - 1)];
+  const angle  = rand(0, Math.PI * 2);
+  const d      = rand(80, 130);
+  const x = clamp(anchor.x + Math.cos(angle) * d, NODE_R + 10, CANVAS_W - NODE_R - 10);
+  const y = clamp(anchor.y + Math.sin(angle) * d, NODE_R + 10, CANVAS_H - NODE_R - 10);
 
-function captureDragNodes(game, cx, cy) {
-  const magnetActive = game.activeEffects.magnet > 0;
+  const newNode = makeNode(x, y, game.nodeLifetimeMult, isPowerup, powerupDef);
+  newNode.edges.push(anchor);
+  anchor.edges.push(newNode);
+
+  // Optionally connect to one more nearby node
+  const nearby = game.nodes
+    .filter(n => n !== anchor && nodeDist(n, newNode) < MAX_EDGE_DIST)
+    .sort((a, b) => nodeDist(a, newNode) - nodeDist(b, newNode));
+  if (nearby.length > 0 && newNode.edges.length < MAX_EDGES_PER_NODE && nearby[0].edges.length < MAX_EDGES_PER_NODE) {
+    newNode.edges.push(nearby[0]);
+    nearby[0].edges.push(newNode);
+  }
+
+  game.nodes.push(newNode);
+}
+
+function graftPowerupNode(game) {
+  const def = POWERUP_DEFS[randInt(0, POWERUP_DEFS.length - 1)];
+  graftNode(game, true, def);
+}
+
+// ── Drag / chain logic ────────────────────────────────────
+
+function nodeAt(game, x, y) {
   for (const node of game.nodes) {
-    if (node.captured) continue;
-    const baseRadius = node.r + 8;
-    const captureR   = magnetActive ? baseRadius * 2 : baseRadius;
-    const dx = cx - node.x;
-    const dy = cy - node.y;
-    if (dx * dx + dy * dy <= captureR * captureR) {
-      node.captured         = true;
-      node.capturedFraction = node.lifetime / node.maxLifetime;
-      game.drag.captured.push(node);
-      if (node.isPowerup) {
-        activatePowerup(game, node.powerupDef);
+    const dx = x - node.x, dy = y - node.y;
+    if (dx * dx + dy * dy <= NODE_R * NODE_R) return node;
+  }
+  return null;
+}
+
+function extendChain(game, x, y) {
+  const last = game.drag.chain[game.drag.chain.length - 1];
+  if (!last) return;
+  for (const neighbor of last.edges) {
+    if (neighbor.inChain) continue;
+    const dx = x - neighbor.x, dy = y - neighbor.y;
+    if (dx * dx + dy * dy <= SNAP_R * SNAP_R) {
+      neighbor.inChain = true;
+      game.drag.chain.push(neighbor);
+      if (neighbor.isPowerup) {
+        activatePowerup(game, neighbor.powerupDef);
+        removeNode(game, neighbor);
+        return; // chain ends after power-up capture
       }
+      break; // only one snap per mousemove event
     }
   }
 }
 
-// ── Chain scoring ─────────────────────────────────────────
-
 function scoreChain(game) {
-  const captured = game.drag.captured;
-  if (captured.length === 0) return;
+  const chain = game.drag.chain.filter(n => !n.isPowerup);
+  if (chain.length === 0) return;
 
-  const count      = captured.length;
-  const mult       = chainMultiplier(count, game.chainBonus);
-  const scoreMult  = game.activeEffects.score_mult > 0 ? 2 : 1;
+  const count    = chain.length;
+  const mult     = chainMultiplier(count, game.chainBonus);
+  const ampMult  = game.activeEffects.amplify > 0 ? 2 : 1;
 
   let total = 0;
-  for (const node of captured) {
-    if (node.isPowerup) continue; // power-ups contribute 0 pts
-    let pts = node.value * mult * scoreMult;
-    if (node.capturedFraction > 0.6) pts *= 1.5; // quick-capture bonus
-    total += pts;
+  for (const node of chain) {
+    total += node.value * node.charge * mult * ampMult;
+    node.charge = 0; // reset after harvest
   }
   total = Math.floor(total);
 
   if (total > 0) {
     game.score += total;
-
-    // Score popup at centroid of captured regular nodes
-    const regNodes = captured.filter(n => !n.isPowerup);
-    if (regNodes.length > 0) {
-      const cx = regNodes.reduce((s, n) => s + n.x, 0) / regNodes.length;
-      const cy = regNodes.reduce((s, n) => s + n.y, 0) / regNodes.length;
-      const label = mult > 1 ? `+${total} ×${mult}` : `+${total}`;
-      addPopup(game, cx, cy, label, '#e89830');
-    }
+    const cx    = chain.reduce((s, n) => s + n.x, 0) / chain.length;
+    const cy    = chain.reduce((s, n) => s + n.y, 0) / chain.length;
+    const label = mult > 1 ? `+${total} ×${mult}` : `+${total}`;
+    addPopup(game, cx, cy, label, '#e89830');
   }
+}
 
-  // Remove captured nodes from canvas
-  game.nodes = game.nodes.filter(n => !n.captured);
+function clearDrag(game) {
+  for (const node of game.drag.chain) {
+    node.inChain = false;
+  }
+  game.drag.active  = false;
+  game.drag.chain   = [];
+  game.drag.lastPos = null;
 }
 
 function chainMultiplier(count, bonus) {
-  // bonus = 0, 1, or 2 (from circuit_chain_bonus upgrade)
+  // bonus = 0, 1, or 2 from circuit_chain_bonus upgrade
   if (count >= 7 - bonus) return 3;
   if (count >= 5 - bonus) return 2;
   if (count >= 3 - bonus) return 1.5;
@@ -305,48 +389,29 @@ function chainMultiplier(count, bonus) {
 
 function activatePowerup(game, def) {
   switch (def.id) {
+    case 'amplify':
     case 'freeze':
-    case 'magnet':
-    case 'score_mult':
-    case 'slow_spawn':
+    case 'reinforce':
       game.activeEffects[def.id] = def.duration;
       break;
 
-    case 'no_penalty':
-      game.shieldCharges += 3;
+    case 'stabilize':
+      for (const node of game.nodes) {
+        node.charge = Math.max(0, node.charge - 0.3);
+      }
+      addPopup(game, CANVAS_W / 2, CANVAS_H / 2 - 20, 'STABILIZED', '#38d4d4');
       break;
 
-    case 'surge':
-      // Score all non-captured, non-powerup nodes instantly at ×1
+    case 'surge_harvest': {
+      let surgeTotal = 0;
       for (const node of game.nodes) {
-        if (!node.captured && !node.isPowerup) {
-          game.score += node.value;
+        if (!node.isPowerup && !node.inChain) {
+          surgeTotal += Math.floor(node.value * node.charge);
+          node.charge = 0;
         }
       }
-      game.nodes = game.nodes.filter(n => n.isPowerup && !n.captured);
-      addPopup(game, CANVAS_W / 2, CANVAS_H / 2, 'SURGE!', '#e04ca0');
-      break;
-
-    case 'bonus_nodes': {
-      // Spawn 5 golden nodes worth 60 pts each
-      for (let i = 0; i < 5; i++) {
-        const r    = 16;
-        const life = 10 * game.nodeLifetimeMult;
-        game.nodes.push({
-          id:               _nodeId++,
-          x:                rand(r + 10, CANVAS_W - r - 10),
-          y:                rand(r + 10, CANVAS_H - r - 10),
-          r,
-          lifetime:         life,
-          maxLifetime:      life,
-          value:            60,
-          isPowerup:        false,
-          powerupDef:       null,
-          captured:         false,
-          capturedFraction: 0,
-          isGolden:         true,
-        });
-      }
+      game.score += surgeTotal;
+      addPopup(game, CANVAS_W / 2, CANVAS_H / 2 - 20, `SURGE +${surgeTotal}`, '#e04ca0');
       break;
     }
 
@@ -364,7 +429,7 @@ function render(ctx, game) {
   ctx.fillStyle = '#0a0a0f';
   ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-  // Grid lines
+  // Grid
   ctx.strokeStyle = 'rgba(0,255,255,0.04)';
   ctx.lineWidth = 1;
   for (let x = 0; x < CANVAS_W; x += 40) {
@@ -374,25 +439,30 @@ function render(ctx, game) {
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CANVAS_W, y); ctx.stroke();
   }
 
-  // Nodes
+  // Edges — draw before nodes so nodes render on top
+  const drawnEdges = new Set();
   for (const node of game.nodes) {
-    if (node.captured) continue;
-    renderNode(ctx, node, game.drag.captured.includes(node));
+    for (const neighbor of node.edges) {
+      const key = [node.id, neighbor.id].sort().join('-');
+      if (drawnEdges.has(key)) continue;
+      drawnEdges.add(key);
+
+      const active = isChainEdge(game, node, neighbor);
+      ctx.beginPath();
+      ctx.moveTo(node.x, node.y);
+      ctx.lineTo(neighbor.x, neighbor.y);
+      ctx.strokeStyle = active ? '#38d4d4' : 'rgba(56,212,212,0.22)';
+      ctx.lineWidth   = active ? 2 : 1;
+      ctx.shadowColor = active ? '#38d4d4' : 'transparent';
+      ctx.shadowBlur  = active ? 8 : 0;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
   }
 
-  // Live drag line
-  if (game.drag.active && game.drag.path.length > 1) {
-    ctx.beginPath();
-    ctx.moveTo(game.drag.path[0].x, game.drag.path[0].y);
-    for (let i = 1; i < game.drag.path.length; i++) {
-      ctx.lineTo(game.drag.path[i].x, game.drag.path[i].y);
-    }
-    ctx.strokeStyle = '#38d4d4';
-    ctx.lineWidth   = 2;
-    ctx.shadowColor = '#38d4d4';
-    ctx.shadowBlur  = 8;
-    ctx.stroke();
-    ctx.shadowBlur = 0;
+  // Nodes
+  for (const node of game.nodes) {
+    renderNode(ctx, node, node.inChain);
   }
 
   // Score popups
@@ -402,115 +472,115 @@ function render(ctx, game) {
     ctx.fillStyle   = popup.color;
     ctx.font        = 'bold 12px "Space Mono", monospace';
     ctx.textAlign   = 'center';
-    ctx.fillText(popup.text, popup.x, popup.y - (1 - alpha) * 24);
+    ctx.fillText(popup.text, popup.x, popup.y - (1 - alpha) * 20);
   }
   ctx.globalAlpha = 1;
 
-  // Active effects HUD strip (above bottom)
   renderEffectsHUD(ctx, game);
 }
 
-function renderNode(ctx, node, isHighlighted) {
-  const fraction = node.lifetime / node.maxLifetime;
-  const color    = nodeColor(node);
+function renderNode(ctx, node, highlighted) {
+  const color = nodeColor(node);
 
-  // Fill
+  // Charge arc track (background)
   ctx.beginPath();
-  ctx.arc(node.x, node.y, node.r, 0, Math.PI * 2);
+  ctx.arc(node.x, node.y, NODE_R + 5, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(56,212,212,0.10)';
+  ctx.lineWidth   = 3;
+  ctx.stroke();
+
+  // Charge arc fill (clockwise from top)
+  if (node.charge > 0.01) {
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, NODE_R + 5, -Math.PI / 2,
+      -Math.PI / 2 + Math.PI * 2 * node.charge);
+    ctx.strokeStyle = color;
+    ctx.lineWidth   = 3;
+    ctx.globalAlpha = 0.7;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  // Node fill
+  ctx.beginPath();
+  ctx.arc(node.x, node.y, NODE_R, 0, Math.PI * 2);
   ctx.fillStyle = color + '22';
   ctx.fill();
 
-  // Outline
-  ctx.strokeStyle = isHighlighted ? '#ffffff' : color;
-  ctx.lineWidth   = isHighlighted ? 2 : 1.5;
+  // Node outline
+  ctx.strokeStyle = highlighted ? '#ffffff' : color;
+  ctx.lineWidth   = highlighted ? 2.5 : 1.5;
   ctx.shadowColor = color;
-  ctx.shadowBlur  = isHighlighted ? 16 : 6;
+  ctx.shadowBlur  = highlighted ? 18 : (node.charge > 0.8 ? 14 : 6);
   ctx.stroke();
   ctx.shadowBlur  = 0;
 
-  // Lifetime arc (clockwise from top, depletes as lifetime shrinks)
-  ctx.beginPath();
-  ctx.arc(node.x, node.y, node.r + 4, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * fraction);
-  ctx.strokeStyle = color;
-  ctx.lineWidth   = 2;
-  ctx.globalAlpha = 0.5;
-  ctx.stroke();
-  ctx.globalAlpha = 1;
-
   // Label
-  ctx.fillStyle   = node.isPowerup ? color : '#ffffff';
-  ctx.font        = `bold ${node.isPowerup ? 14 : 10}px "Space Mono", monospace`;
-  ctx.textAlign   = 'center';
+  ctx.fillStyle    = node.isPowerup ? color : '#ffffff';
+  ctx.font         = `bold ${node.isPowerup ? 13 : 10}px "Space Mono", monospace`;
+  ctx.textAlign    = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(node.isPowerup ? node.powerupDef.label : node.value, node.x, node.y);
   ctx.textBaseline = 'alphabetic';
 
-  // Power-up pulsing glow
-  if (node.isPowerup) {
-    const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 300);
+  // Pulsing outer ring for power-ups or near-overload nodes
+  if (node.isPowerup || node.charge > 0.8) {
+    const pulse = 0.4 + 0.4 * Math.sin(Date.now() / 250);
     ctx.beginPath();
-    ctx.arc(node.x, node.y, node.r + 6, 0, Math.PI * 2);
+    ctx.arc(node.x, node.y, NODE_R + 9, 0, Math.PI * 2);
     ctx.strokeStyle = color;
     ctx.lineWidth   = 1;
-    ctx.globalAlpha = pulse * 0.4;
+    ctx.globalAlpha = pulse * 0.5;
     ctx.stroke();
     ctx.globalAlpha = 1;
   }
 }
 
-function renderEffectsHUD(ctx, game) {
-  const timedEffects = Object.entries(game.activeEffects)
-    .filter(([, t]) => t > 0);
+function nodeColor(node) {
+  if (node.isPowerup) return node.powerupDef.color;
+  const c = node.charge;
+  if (c >= 0.8) return '#e04ca0'; // magenta — danger
+  if (c >= 0.5) return '#e89830'; // amber — warning
+  return '#38d4d4';                // cyan — safe
+}
 
+function isChainEdge(game, a, b) {
+  if (!game.drag.active) return false;
+  const chain = game.drag.chain;
+  for (let i = 0; i < chain.length - 1; i++) {
+    if ((chain[i] === a && chain[i + 1] === b) ||
+        (chain[i] === b && chain[i + 1] === a)) return true;
+  }
+  return false;
+}
+
+function renderEffectsHUD(ctx, game) {
+  const timed = Object.entries(game.activeEffects).filter(([, t]) => t > 0);
   let x = 10;
   const y = CANVAS_H - 30;
 
-  for (const [id, timeLeft] of timedEffects) {
+  for (const [id, timeLeft] of timed) {
     const def = POWERUP_DEFS.find(d => d.id === id);
     if (!def) continue;
-
     ctx.fillStyle   = def.color + '33';
-    roundRect(ctx, x, y - 10, 52, 18, 4);
+    roundRect(ctx, x, y - 10, 54, 18, 4);
     ctx.fill();
     ctx.strokeStyle = def.color;
     ctx.lineWidth   = 1;
-    roundRect(ctx, x, y - 10, 52, 18, 4);
+    roundRect(ctx, x, y - 10, 54, 18, 4);
     ctx.stroke();
-
-    ctx.fillStyle    = def.color;
-    ctx.font         = '9px "Space Mono", monospace';
-    ctx.textAlign    = 'left';
+    ctx.fillStyle = def.color;
+    ctx.font      = '9px "Space Mono", monospace';
+    ctx.textAlign = 'left';
     ctx.fillText(`${def.label} ${timeLeft.toFixed(1)}s`, x + 4, y + 3);
-    x += 58;
+    x += 60;
   }
-
-  // Shield charges indicator
-  if (game.shieldCharges > 0) {
-    ctx.fillStyle  = '#38d4d4';
-    ctx.font       = '9px "Space Mono", monospace';
-    ctx.textAlign  = 'left';
-    ctx.fillText(`🛡 ×${game.shieldCharges}`, x + 4, y + 3);
-  }
-}
-
-function nodeColor(node) {
-  if (node.isPowerup)  return node.powerupDef.color;
-  if (node.isGolden)   return '#ffd700';
-  if (node.value >= 23) return '#e89830'; // amber — high value
-  if (node.value >= 16) return '#e04ca0'; // magenta — medium
-  return '#38d4d4';                        // cyan — low
 }
 
 // ── Utilities ─────────────────────────────────────────────
 
-function spawnInterval(elapsed) {
-  // Lerp from BASE → MIN over the session
-  const t = Math.min(elapsed / SESSION_SECS, 1);
-  return SPAWN_INTERVAL_BASE + (SPAWN_INTERVAL_MIN - SPAWN_INTERVAL_BASE) * t;
-}
-
 function addPopup(game, x, y, text, color) {
-  game.popups.push({ x, y, text, color, life: 1.2, maxLife: 1.2 });
+  game.popups.push({ x, y, text, color, life: 1.4, maxLife: 1.4 });
 }
 
 function canvasPos(canvas, e) {
@@ -518,8 +588,14 @@ function canvasPos(canvas, e) {
   return { x: e.clientX - rect.left, y: e.clientY - rect.top };
 }
 
-function rand(lo, hi)    { return lo + Math.random() * (hi - lo); }
-function randInt(lo, hi) { return Math.floor(rand(lo, hi + 1)); }
+function nodeDist(a, b) {
+  const dx = a.x - b.x, dy = a.y - b.y;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function clamp(v, lo, hi)  { return Math.max(lo, Math.min(hi, v)); }
+function rand(lo, hi)       { return lo + Math.random() * (hi - lo); }
+function randInt(lo, hi)    { return Math.floor(rand(lo, hi + 1)); }
 
 function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
