@@ -239,3 +239,23 @@ export function getVisibleUpgrades() {
     return true;
   });
 }
+
+const GAME_IDS = ['paddle', 'target', 'circuit'];
+
+/** Return upgrades relevant to a specific context.
+ *  context: 'paddle' | 'target' | 'circuit' | 'global'
+ */
+export function getUpgradesForContext(context) {
+  if (context === 'global') {
+    return UPGRADES.filter(u => {
+      if (GAME_IDS.some(id => u.id.startsWith(id + '_'))) return false;
+      if (u.id === 'prestige_bonus' && state.stage < 2) return false;
+      return true;
+    });
+  }
+  return UPGRADES.filter(u => {
+    if (!u.id.startsWith(context + '_')) return false;
+    if (!state.games[context]?.unlocked) return false;
+    return true;
+  });
+}
