@@ -1,4 +1,4 @@
-// js/games/target.js — turret + projectile target game
+// js/games/target.js — floating circle target game
 
 import { submitResult, showResults } from './base-game.js';
 import { getUpgradeValue } from '../upgrades.js';
@@ -7,16 +7,9 @@ const CANVAS_W = 480;
 const CANVAS_H = 420;
 const SESSION_SECS = 30;
 
-// Turret
-const TURRET_X = CANVAS_W / 2;
-const TURRET_Y = CANVAS_H / 2;
-const TURRET_R  = 18;
-const BARREL_LEN = 28;
-const BASE_TRACK_SPEED = 1.5;  // rad/sec
-
-// Projectiles
-const PROJECTILE_SPEED = 400;  // px/sec
-const PROJECTILE_R = 4;
+// Player circle
+const BASE_PLAYER_R    = 20;   // px
+const BASE_TRACK_SPEED = 4;    // lerp speed (higher = snappier)
 
 // Targets
 const MIN_SPAWN_INTERVAL = 0.6;
@@ -37,9 +30,9 @@ export function launchTarget(onExit) {
   let animId = null;
   let lastTs = null;
 
-  // Track mouse relative to canvas
-  let mouseX = TURRET_X;
-  let mouseY = TURRET_Y - BARREL_LEN;
+  let mouseX = CANVAS_W / 2;
+  let mouseY = CANVAS_H / 2;
+
   canvas.addEventListener('mousemove', e => {
     const rect = canvas.getBoundingClientRect();
     mouseX = e.clientX - rect.left;
@@ -47,7 +40,7 @@ export function launchTarget(onExit) {
   });
 
   canvas.addEventListener('click', () => {
-    fireProjectile(game);
+    tryHit(game);
   });
 
   function loop(ts) {
@@ -91,22 +84,19 @@ function initGame() {
     chain:     0,
     chainTime: 0,
     targets:   [],
-    projectiles: [],
     nextSpawn: randBetween(0.3, 0.8),
-    turretAngle: -Math.PI / 2,  // start pointing up
+    // Player circle position (starts at canvas center)
+    px: CANVAS_W / 2,
+    py: CANVAS_H / 2,
   };
 }
 
 function update(g, dt, mx, my) {
-  // Turret tracking
-  const targetAngle = Math.atan2(my - TURRET_Y, mx - TURRET_X);
-  const trackSpeed  = BASE_TRACK_SPEED + getUpgradeValue('target_tracking_speed');
-  let diff = targetAngle - g.turretAngle;
-  // Normalize to [-π, π]
-  while (diff >  Math.PI) diff -= 2 * Math.PI;
-  while (diff < -Math.PI) diff += 2 * Math.PI;
-  const step = trackSpeed * dt;
-  g.turretAngle += Math.abs(diff) < step ? diff : Math.sign(diff) * step;
+  // Smooth lerp toward mouse
+  const trackSpeed = BASE_TRACK_SPEED + getUpgradeValue('target_tracking_speed');
+  const factor = Math.min(trackSpeed * dt, 1);
+  g.px += (mx - g.px) * factor;
+  g.py += (my - g.py) * factor;
 
   // Chain timeout
   if (g.chain > 0) {
@@ -121,57 +111,38 @@ function update(g, dt, mx, my) {
     g.nextSpawn = randBetween(MIN_SPAWN_INTERVAL, MAX_SPAWN_INTERVAL);
   }
 
-  // Age targets
+  // Age + shrink targets
   for (const t of g.targets) {
     t.age += dt;
     t.r = TARGET_MAX_R * Math.max(0, 1 - t.age / TARGET_LIFETIME);
-  }
-
-  // Move projectiles
-  for (const p of g.projectiles) {
-    p.x += p.vx * dt;
-    p.y += p.vy * dt;
-  }
-
-  // Hit detection: projectile vs target
-  for (let pi = g.projectiles.length - 1; pi >= 0; pi--) {
-    const p = g.projectiles[pi];
-    for (let ti = g.targets.length - 1; ti >= 0; ti--) {
-      const t = g.targets[ti];
-      const dx = p.x - t.x, dy = p.y - t.y;
-      if (dx * dx + dy * dy <= t.r * t.r) {
-        const sizeFrac = t.r / TARGET_MAX_R;
-        g.chain++;
-        g.chainTime = 0;
-        g.score += Math.floor(100 * sizeFrac * Math.ceil(g.chain / 3));
-        g.targets.splice(ti, 1);
-        g.projectiles.splice(pi, 1);
-        break;
-      }
-    }
   }
 
   // Remove expired targets (chain breaks)
   const before = g.targets.length;
   g.targets = g.targets.filter(t => t.r > TARGET_MIN_R);
   if (g.targets.length < before) { g.chain = 0; g.chainTime = 0; }
-
-  // Remove off-canvas projectiles
-  g.projectiles = g.projectiles.filter(p =>
-    p.x >= 0 && p.x <= CANVAS_W && p.y >= 0 && p.y <= CANVAS_H
-  );
 }
 
-function fireProjectile(g) {
-  g.projectiles.push({
-    x:  TURRET_X,
-    y:  TURRET_Y,
-    vx: Math.cos(g.turretAngle) * PROJECTILE_SPEED,
-    vy: Math.sin(g.turretAngle) * PROJECTILE_SPEED,
-  });
+function tryHit(g) {
+  const pr = BASE_PLAYER_R + getUpgradeValue('target_cursor_size');
+  for (let i = g.targets.length - 1; i >= 0; i--) {
+    const t = g.targets[i];
+    const dx = g.px - t.x, dy = g.py - t.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < pr + t.r) {
+      const sizeFrac = t.r / TARGET_MAX_R;
+      g.chain++;
+      g.chainTime = 0;
+      g.score += Math.floor(100 * sizeFrac * Math.ceil(g.chain / 3));
+      g.targets.splice(i, 1);
+      return; // one hit per click
+    }
+  }
 }
 
 function render(ctx, g) {
+  const pr = BASE_PLAYER_R + getUpgradeValue('target_cursor_size');
+
   // Background
   ctx.fillStyle = '#0a0a0f';
   ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
@@ -205,30 +176,19 @@ function render(ctx, g) {
     ctx.fillStyle = color;
     ctx.fill();
 
+    const cs = t.r * 0.5;
     ctx.strokeStyle = color;
     ctx.lineWidth = 1;
-    const cs = t.r * 0.5;
     ctx.beginPath();
     ctx.moveTo(t.x - cs, t.y); ctx.lineTo(t.x + cs, t.y);
     ctx.moveTo(t.x, t.y - cs); ctx.lineTo(t.x, t.y + cs);
     ctx.stroke();
   }
 
-  // Projectiles
-  for (const p of g.projectiles) {
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, PROJECTILE_R, 0, Math.PI * 2);
-    ctx.fillStyle = '#00ffff';
-    ctx.shadowColor = '#00ffff';
-    ctx.shadowBlur = 10;
-    ctx.fill();
-    ctx.shadowBlur = 0;
-  }
-
-  // Turret body
+  // Player circle
   ctx.beginPath();
-  ctx.arc(TURRET_X, TURRET_Y, TURRET_R, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(0, 255, 255, 0.15)';
+  ctx.arc(g.px, g.py, pr, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0, 255, 255, 0.10)';
   ctx.strokeStyle = '#00ffff';
   ctx.lineWidth = 2;
   ctx.shadowColor = '#00ffff';
@@ -237,18 +197,13 @@ function render(ctx, g) {
   ctx.stroke();
   ctx.shadowBlur = 0;
 
-  // Barrel
-  const bx = TURRET_X + Math.cos(g.turretAngle) * (TURRET_R + BARREL_LEN);
-  const by = TURRET_Y + Math.sin(g.turretAngle) * (TURRET_R + BARREL_LEN);
+  // Crosshair inside player circle
+  ctx.strokeStyle = 'rgba(0, 255, 255, 0.5)';
+  ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(TURRET_X, TURRET_Y);
-  ctx.lineTo(bx, by);
-  ctx.strokeStyle = '#ff00ff';
-  ctx.lineWidth = 3;
-  ctx.shadowColor = '#ff00ff';
-  ctx.shadowBlur = 8;
+  ctx.moveTo(g.px - pr * 0.6, g.py); ctx.lineTo(g.px + pr * 0.6, g.py);
+  ctx.moveTo(g.px, g.py - pr * 0.6); ctx.lineTo(g.px, g.py + pr * 0.6);
   ctx.stroke();
-  ctx.shadowBlur = 0;
 }
 
 function spawnTarget() {
