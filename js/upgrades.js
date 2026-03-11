@@ -230,16 +230,6 @@ export function purchaseUpgrade(id) {
   return true;
 }
 
-/** Filter upgrades visible to the player based on stage */
-export function getVisibleUpgrades() {
-  return UPGRADES.filter(u => {
-    if (u.id.startsWith('target_') && !state.games.target.unlocked) return false;
-    if (u.id.startsWith('circuit_') && !state.games.circuit.unlocked) return false;
-    if (u.id === 'prestige_bonus' && state.stage < 2) return false;
-    return true;
-  });
-}
-
 const GAME_IDS = ['paddle', 'target', 'circuit'];
 
 /** Return upgrades relevant to a specific context.
