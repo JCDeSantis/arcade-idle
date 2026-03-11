@@ -75,6 +75,17 @@ export const UPGRADES = [
     maxLevel: 5,
     effect: lvl => lvl * 0.5,  // added rad/sec (not a multiplier)
   },
+  {
+    id: 'target_cursor_size',
+    name: 'Wide Lens',
+    desc: 'Cursor circle +5px radius per level',
+    icon: '🔍',
+    currency: 'bits',
+    baseCost: 150,
+    costScale: 2.0,
+    maxLevel: 5,
+    effect: lvl => lvl * 5,  // added px (not a multiplier)
+  },
   // ── Global upgrades ───────────────────────────────────
   {
     id: 'auto_mult',
