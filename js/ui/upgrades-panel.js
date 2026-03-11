@@ -2,14 +2,14 @@
 
 import { state, on, off } from '../state.js';
 import {
-  getVisibleUpgrades, getUpgradeLevel, getUpgradeCost,
+  getUpgradesForContext, getUpgradeLevel, getUpgradeCost,
   canAfford, purchaseUpgrade
 } from '../upgrades.js';
 import { formatNumber } from '../utils.js';
 
-export function initUpgradesPanel() {
-  renderUpgradesPanel();
-  const refresh = () => renderUpgradesPanel();
+export function initUpgradesPanel(context = 'global') {
+  renderUpgradesPanel(context);
+  const refresh = () => renderUpgradesPanel(context);
   on('currency:change', refresh);
   on('upgrade:change',  refresh);
   observePanelClose(() => {
@@ -18,11 +18,11 @@ export function initUpgradesPanel() {
   });
 }
 
-function renderUpgradesPanel() {
+function renderUpgradesPanel(context) {
   const body = document.getElementById('panel-body');
   if (!body) return;
 
-  const upgrades = getVisibleUpgrades();
+  const upgrades = getUpgradesForContext(context);
   body.innerHTML = upgrades.map(u => {
     const level    = getUpgradeLevel(u.id);
     const cost     = getUpgradeCost(u.id);
