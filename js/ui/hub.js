@@ -30,7 +30,7 @@ function renderHub() {
     <div class="hub-title">AI TRAINING ARCADE</div>
     ${state.prestige.count > 0 ? `<div class="hub-prestige-badge">PRESTIGE ${state.prestige.count}</div>` : ''}
     <div class="hub-tabs">
-      <button class="hub-tab" data-panel="upgrades">UPGRADES</button>
+      <button class="hub-tab" data-panel="upgrades" data-panel-context="global">GLOBAL UPGRADES</button>
       <button class="hub-tab" data-panel="automation">AUTOMATION</button>
       <button class="hub-tab" data-panel="prestige" id="prestige-tab"
         ${state.stage < 2 ? 'style="display:none"' : ''}>PRESTIGE</button>
@@ -47,8 +47,15 @@ function renderHub() {
     card.addEventListener('click', () => launchGame(card.dataset.game));
   });
 
-  hub.querySelectorAll('.hub-tab').forEach(tab => {
-    tab.addEventListener('click', () => openPanel(tab.dataset.panel));
+  hub.querySelectorAll('.hub-tab[data-panel]').forEach(tab => {
+    tab.addEventListener('click', () => openPanel(tab.dataset.panel, tab.dataset.panelContext));
+  });
+
+  hub.querySelectorAll('.card-upgrades-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation(); // prevent card click from launching the game
+      openPanel('upgrades', btn.dataset.game);
+    });
   });
 
   document.getElementById('save-btn').addEventListener('click', () => {
@@ -151,7 +158,8 @@ function gameCard(id, icon, label) {
       <div class="card-title">${label}</div>
       ${locked
         ? `<div class="card-lock-msg">🔒 ${lockMsg}</div>`
-        : `<div class="card-mastery">MASTERY ${mastery}%</div>`
+        : `<div class="card-mastery">MASTERY ${mastery}%</div>
+           <button class="card-upgrades-btn" data-game="${id}">UPGRADES</button>`
       }
     </div>
   `;
