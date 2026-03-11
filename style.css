@@ -202,7 +202,7 @@ body {
 }
 .card-upgrades-btn:hover {
   opacity: 1;
-  box-shadow: 0 0 6px var(--cyan)44;
+  box-shadow: var(--glow-cyan);
 }
 
 .hub-title {
