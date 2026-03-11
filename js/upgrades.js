@@ -64,6 +64,17 @@ export const UPGRADES = [
     maxLevel: 8,
     effect: lvl => 1 + lvl * 0.30,
   },
+  {
+    id: 'target_tracking_speed',
+    name: 'Targeting Core',
+    desc: 'Turret tracks mouse +0.5 rad/sec faster per level',
+    icon: '🎯',
+    currency: 'bits',
+    baseCost: 250,
+    costScale: 2.5,
+    maxLevel: 5,
+    effect: lvl => lvl * 0.5,  // added rad/sec (not a multiplier)
+  },
   // ── Global upgrades ───────────────────────────────────
   {
     id: 'auto_mult',
