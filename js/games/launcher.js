@@ -3,11 +3,13 @@
 import { launchPaddle }   from './paddle.js';
 import { launchTarget }   from './target.js';
 import { launchCircuit }  from './circuit.js';
+import { launchPool }     from './pool.js';
 
 const launchers = {
   paddle:  launchPaddle,
   target:  launchTarget,
   circuit: launchCircuit,
+  pool:    launchPool,
 };
 
 export function launchGame(id) {
