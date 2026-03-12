@@ -2,7 +2,7 @@
 
 import { submitResult, showResults } from './base-game.js';
 import { getUpgradeValue } from '../upgrades.js';
-import { getTotalAutoRate } from '../automation.js';
+import { getAutoRate } from '../automation.js';
 
 // ── Constants ─────────────────────────────────────────────
 const CANVAS_W = 600;
@@ -103,7 +103,7 @@ export function launchPool(onExit) {
     update(game, dt);
 
     // Automation: auto-fire when idle automation is active and table is ready
-    if (!game.shotLocked && !game.scratch && getTotalAutoRate() > 0) {
+    if (!game.shotLocked && !game.scratch && getAutoRate('pool') > 0) {
       autoShot(game);
     }
 
