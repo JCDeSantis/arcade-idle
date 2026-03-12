@@ -174,6 +174,11 @@ function update(g, dt) {
   if (g.scratch) {
     g.scratchTimer -= dt;
     for (const b of g.balls) moveBall(b);
+    for (let i = 0; i < g.balls.length; i++) {
+      for (let j = i + 1; j < g.balls.length; j++) {
+        resolveCollision(g.balls[i], g.balls[j]);
+      }
+    }
     if (g.scratchTimer <= 0) {
       g.scratch     = false;
       g.shotLocked  = false;
@@ -420,7 +425,6 @@ function render(ctx, g, drag) {
 
   // Shot-locked indicator
   if (g.shotLocked) {
-    ctx.fillStyle = 'rgba(255,255,0,0.18)';
     ctx.font = '600 10px monospace';
     ctx.fillStyle = 'rgba(255,255,100,0.35)';
     ctx.textAlign = 'center';
