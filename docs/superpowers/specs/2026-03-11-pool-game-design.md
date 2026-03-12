@@ -49,32 +49,44 @@ A 600×380 canvas. All balls (cue + colored) are physics objects with `{x, y, vx
 
 ## Session Flow
 
-1. Session starts: fresh rack spawns, cue ball at head string
-2. Player drags from cue ball to aim, releases to shoot
-3. After balls settle: if colored balls remain → player shoots again; if rack cleared → new rack spawns, rack counter increments, rack clear bonus awarded
-4. Player clicks **END SESSION** button to finish (no time limit)
-5. Results screen shows score + bit rewards, then returns to hub
+1. Session starts: fresh rack spawns, cue ball at head string, running `score = 0`, `rackNumber = 1`
+2. Player drags from cue ball to aim, releases to shoot; score accumulates each shot
+3. After balls settle: if colored balls remain → player shoots again; if rack cleared → rack clear bonus added to score, new rack spawns, `rackNumber++`
+4. Player clicks **END SESSION** button to finish (no time limit); accumulated `score` is passed to `submitResult('pool', score)`
+5. Results screen shows score + bit/TD rewards, then returns to hub
+6. **Drag tolerance:** `mousedown` within `r + 8` pixels of cue ball center starts a drag
 
 ## Upgrades
 
+Standard economy upgrades (consumed by `base-game.js` `submitResult`):
+
 | ID | Name | Effect |
 |----|------|--------|
-| `pool_rack_size` | Full Rack | +1 ball per rack per level (base 6, max 10, 4 levels) |
-| `pool_power_cap` | Break Force | +3 max shot power per level (base 18, 3 levels) |
-| `pool_pocket_size` | Wide Pockets | +3px pocket radius per level (base 18, 3 levels) |
+| `pool_bit_mult` | Hustle Pay | Pool sessions earn +25% Bits per level (10 levels, costs bits) |
+| `pool_td_mult` | Pocket Wisdom | Pool sessions earn +30% Training Data per level (8 levels, costs trainingData) |
+| `pool_mastery_rate` | Cue Mastery | Pool mastery gain rate ×1.5 per level (5 levels, costs bits) |
 
-All upgrades cost `bits`.
+Pool-specific gameplay upgrades:
+
+| ID | Name | Effect |
+|----|------|--------|
+| `pool_rack_size` | Full Rack | +1 ball per rack per level (base 6, max 10, 4 levels, costs bits) |
+| `pool_power_cap` | Break Force | +3 max shot power per level (base 18, 3 levels, costs bits) |
+| `pool_pocket_size` | Wide Pockets | +3px pocket radius per level (base 18, 3 levels, costs bits) |
 
 ## Automation
 
-When global idle automation is active, the game auto-fires toward the nearest colored ball at 50% base power. The `pool_power_cap` upgrade improves auto-shot power proportionally.
+When global idle automation is active and all balls are settled (shot lock is off), the game auto-fires toward the nearest colored ball (by Euclidean distance from cue ball center) at 50% base power. Auto-shot is only triggered after the cue ball is in play (not in scratch-respawn state). The `pool_power_cap` upgrade improves auto-shot power proportionally.
 
 ## Integration Points
 
 - **New file:** `js/games/pool.js` — exports `launchPool(onExit)`
 - **Modify:** `js/games/launcher.js` — add `pool` case
-- **Modify:** `js/state.js` — add `pool` game entry (unlocked after reaching a score threshold in Target or Circuit)
-- **Modify:** `js/upgrades.js` — add `pool_*` upgrade entries
+- **Modify:** `js/state.js`:
+  - Add `pool` entry to `state.games` (initially `unlocked: false`)
+  - Add `unlockStage4()` function that sets `state.stage = 4` and `state.games.pool.unlocked = true`, emits `stage:unlock`
+- **Modify:** `js/loop.js` — add Stage 4 unlock check in `tick()`: `if (state.stage < 4 && state.currencies.lifetimeBits >= 500000) { unlockStage4(); }` (500k lifetimeBits threshold, consistent with Stage 2 = 50k, Stage 3 = 200k progression)
+- **Modify:** `js/upgrades.js` — add all `pool_*` upgrade entries
 - **Modify:** `js/ui/hub.js` — add pool game card
 
 ## Out of Scope
