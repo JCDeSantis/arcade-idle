@@ -2,7 +2,6 @@
 
 import { submitResult, showResults } from './base-game.js';
 import { getUpgradeValue } from '../upgrades.js';
-import { getAutoRate } from '../automation.js';
 
 // ── Constants ─────────────────────────────────────────────
 const CANVAS_W = 600;
@@ -17,6 +16,7 @@ const BASE_MAX_POWER  = 18;
 const FRICTION        = 0.985;
 const SETTLE_THRESH   = 0.2;
 const DRAG_TOLERANCE  = BALL_R + 8;  // px from cue center to start drag
+const SUBSTEPS        = 4;           // physics sub-steps per frame (prevents tunneling)
 
 const HEAD_X     = TABLE_L + (TABLE_R - TABLE_L) * 0.28;
 const RACK_X     = TABLE_L + (TABLE_R - TABLE_L) * 0.65;
@@ -60,8 +60,6 @@ export function launchPool(onExit) {
 
   // Drag state — tracks mousedown-to-mouseup for cue aiming
   let drag = { active: false, startX: 0, startY: 0, curX: 0, curY: 0 };
-  let lastInteraction = Date.now();
-  const AUTO_IDLE_MS = 3000;  // auto-shot only fires after 3s of no mouse activity
 
   function toCanvas(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
@@ -69,7 +67,6 @@ export function launchPool(onExit) {
   }
 
   function onMouseDown(e) {
-    lastInteraction = Date.now();
     if (game.shotLocked || game.scratch) return;
     const { x, y } = toCanvas(e.clientX, e.clientY);
     if (Math.hypot(x - game.cueBall.x, y - game.cueBall.y) <= DRAG_TOLERANCE) {
@@ -78,7 +75,6 @@ export function launchPool(onExit) {
   }
 
   function onMouseMove(e) {
-    lastInteraction = Date.now();
     if (drag.active) {
       const { x, y } = toCanvas(e.clientX, e.clientY);
       drag.curX = x;
@@ -87,7 +83,6 @@ export function launchPool(onExit) {
   }
 
   function onMouseUp(e) {
-    lastInteraction = Date.now();
     if (!drag.active) return;
     const { x, y } = toCanvas(e.clientX, e.clientY);
     drag.curX = x;
@@ -106,13 +101,6 @@ export function launchPool(onExit) {
     lastTs = ts;
 
     update(game, dt);
-
-    // Automation: auto-fire only when player has been idle for 3s
-    const playerIdle = Date.now() - lastInteraction >= AUTO_IDLE_MS;
-    if (!game.shotLocked && !game.scratch && playerIdle && getAutoRate('pool') > 0) {
-      autoShot(game);
-    }
-
     render(ctx, game, drag);
 
     scoreEl.textContent = game.score;
@@ -149,12 +137,12 @@ export function launchPool(onExit) {
 // ── Game init ─────────────────────────────────────────────
 function initGame() {
   return {
-    score:           0,
-    chain:           0,
-    rackNumber:      1,
-    shotLocked:      false,
-    scratch:         false,
-    scratchTimer:    0,
+    score:            0,
+    chain:            0,
+    rackNumber:       1,
+    shotLocked:       false,
+    scratch:          false,
+    scratchTimer:     0,
     pocketedThisShot: 0,
     cueBall: { x: HEAD_X, y: TABLE_CY, vx: 0, vy: 0, r: BALL_R },
     balls:   buildRack(6 + getUpgradeValue('pool_rack_size')),
@@ -179,39 +167,48 @@ function update(g, dt) {
   // Scratch countdown: colored balls keep rolling, cue ball is hidden
   if (g.scratch) {
     g.scratchTimer -= dt;
-    for (const b of g.balls) moveBall(b);
-    for (let i = 0; i < g.balls.length; i++) {
-      for (let j = i + 1; j < g.balls.length; j++) {
-        resolveCollision(g.balls[i], g.balls[j]);
+    for (let s = 0; s < SUBSTEPS; s++) {
+      for (const b of g.balls) advanceBall(b);
+      for (let i = 0; i < g.balls.length; i++) {
+        for (let j = i + 1; j < g.balls.length; j++) {
+          resolveCollision(g.balls[i], g.balls[j]);
+        }
       }
     }
+    for (const b of g.balls) applyFriction(b);
     if (g.scratchTimer <= 0) {
-      g.scratch     = false;
-      g.shotLocked  = false;
+      g.scratch          = false;
+      g.shotLocked       = false;
       g.pocketedThisShot = 0;
-      g.cueBall.x   = HEAD_X;
-      g.cueBall.y   = TABLE_CY;
-      g.cueBall.vx  = 0;
-      g.cueBall.vy  = 0;
+      g.cueBall.x        = HEAD_X;
+      g.cueBall.y        = TABLE_CY;
+      g.cueBall.vx       = 0;
+      g.cueBall.vy       = 0;
     }
     return;
   }
 
   if (!g.shotLocked) return;
 
-  // Move all balls
-  moveBall(g.cueBall);
-  for (const b of g.balls) moveBall(b);
+  // Sub-stepped movement + collision (prevents fast-ball tunneling)
+  for (let s = 0; s < SUBSTEPS; s++) {
+    advanceBall(g.cueBall);
+    for (const b of g.balls) advanceBall(b);
 
-  // Collisions: cue vs each colored ball
-  for (const b of g.balls) resolveCollision(g.cueBall, b);
+    // Cue vs each colored ball
+    for (const b of g.balls) resolveCollision(g.cueBall, b);
 
-  // Collisions: colored vs colored
-  for (let i = 0; i < g.balls.length; i++) {
-    for (let j = i + 1; j < g.balls.length; j++) {
-      resolveCollision(g.balls[i], g.balls[j]);
+    // Colored vs colored
+    for (let i = 0; i < g.balls.length; i++) {
+      for (let j = i + 1; j < g.balls.length; j++) {
+        resolveCollision(g.balls[i], g.balls[j]);
+      }
     }
   }
+
+  // Apply friction once per frame (after all sub-steps)
+  applyFriction(g.cueBall);
+  for (const b of g.balls) applyFriction(b);
 
   // Cue ball pocket check (scratch)
   for (const p of POCKET_POSITIONS) {
@@ -223,7 +220,7 @@ function update(g, dt) {
       g.cueBall.vy   = 0;
       g.cueBall.x    = -9999;  // hide off-canvas during scratch
       g.cueBall.y    = -9999;
-      return;  // skip settle check this frame
+      return;
     }
   }
 
@@ -248,11 +245,10 @@ function update(g, dt) {
     if (g.pocketedThisShot > 0) {
       g.chain++;
     } else {
-      g.chain = 0;  // dry shot resets chain
+      g.chain = 0;
     }
     g.pocketedThisShot = 0;
 
-    // Rack cleared
     if (g.balls.length === 0) {
       g.score += 500 * g.rackNumber;
       g.rackNumber++;
@@ -261,18 +257,22 @@ function update(g, dt) {
   }
 }
 
-function moveBall(b) {
-  b.x += b.vx;
-  b.y += b.vy;
-  b.vx *= FRICTION;
-  b.vy *= FRICTION;
-  if (Math.abs(b.vx) < SETTLE_THRESH) b.vx = 0;
-  if (Math.abs(b.vy) < SETTLE_THRESH) b.vy = 0;
-  // Wall bounce (keep ball inside table)
+// Move ball by 1/SUBSTEPS of its velocity, bounce off walls
+function advanceBall(b) {
+  b.x += b.vx / SUBSTEPS;
+  b.y += b.vy / SUBSTEPS;
   if (b.x - b.r < TABLE_L) { b.x = TABLE_L + b.r; b.vx =  Math.abs(b.vx); }
   if (b.x + b.r > TABLE_R) { b.x = TABLE_R - b.r; b.vx = -Math.abs(b.vx); }
   if (b.y - b.r < TABLE_T) { b.y = TABLE_T + b.r; b.vy =  Math.abs(b.vy); }
   if (b.y + b.r > TABLE_B) { b.y = TABLE_B - b.r; b.vy = -Math.abs(b.vy); }
+}
+
+// Apply friction + zero out tiny velocities (called once per frame)
+function applyFriction(b) {
+  b.vx *= FRICTION;
+  b.vy *= FRICTION;
+  if (Math.abs(b.vx) < SETTLE_THRESH) b.vx = 0;
+  if (Math.abs(b.vy) < SETTLE_THRESH) b.vy = 0;
 }
 
 function resolveCollision(a, b) {
@@ -285,14 +285,14 @@ function resolveCollision(a, b) {
   if (dist === 0) return;
   const nx = dx / dist, ny = dy / dist;
 
-  // Separate overlapping balls
+  // Push apart so they no longer overlap
   const overlap = minDist - dist;
   a.x -= nx * overlap * 0.5;
   a.y -= ny * overlap * 0.5;
   b.x += nx * overlap * 0.5;
   b.y += ny * overlap * 0.5;
 
-  // Exchange velocity along collision normal (equal-mass elastic)
+  // Exchange velocity component along collision normal (equal-mass elastic)
   const dvx = a.vx - b.vx, dvy = a.vy - b.vy;
   const dot = dvx * nx + dvy * ny;
   if (dot <= 0) return;  // already separating
@@ -308,7 +308,7 @@ function isAllSettled(g) {
 }
 
 function isSettled(b) {
-  return Math.abs(b.vx) < SETTLE_THRESH && Math.abs(b.vy) < SETTLE_THRESH;
+  return b.vx === 0 && b.vy === 0;
 }
 
 // ── Shot firing ───────────────────────────────────────────
@@ -317,36 +317,39 @@ function fireShot(g, drag) {
   const dx = drag.curX - drag.startX;
   const dy = drag.curY - drag.startY;
   const dragDist = Math.hypot(dx, dy);
-  if (dragDist < 2) return;  // ignore tiny drags
+  if (dragDist < 2) return;
 
   const maxPower = BASE_MAX_POWER + getUpgradeValue('pool_power_cap');
   const power    = Math.min(dragDist / 8, maxPower);
-  // Direction is opposite to drag vector
   g.cueBall.vx = (-dx / dragDist) * power;
   g.cueBall.vy = (-dy / dragDist) * power;
   g.shotLocked = true;
   g.pocketedThisShot = 0;
 }
 
-function autoShot(g) {
-  if (g.balls.length === 0) return;
-  const cue = g.cueBall;
-  let nearest = null, nearestDist = Infinity;
-  for (const b of g.balls) {
-    const d = Math.hypot(b.x - cue.x, b.y - cue.y);
-    if (d < nearestDist) { nearestDist = d; nearest = b; }
-  }
-  if (!nearest) return;
+// ── Guide line prediction ─────────────────────────────────
+// Returns { t, ball } for the first colored ball the cue ball ray would hit,
+// or null if no ball is in the path. Uses the ghost-ball intersection method.
+function findFirstHit(cue, balls, nx, ny) {
+  let minT    = Infinity;
+  let hitBall = null;
+  const twoR  = BALL_R * 2;
 
-  const maxPower = BASE_MAX_POWER + getUpgradeValue('pool_power_cap');
-  const power    = maxPower * 0.5;
-  const dx = nearest.x - cue.x, dy = nearest.y - cue.y;
-  const dist = Math.hypot(dx, dy);
-  if (dist === 0) return;
-  g.cueBall.vx = (dx / dist) * power;
-  g.cueBall.vy = (dy / dist) * power;
-  g.shotLocked = true;
-  g.pocketedThisShot = 0;
+  for (const b of balls) {
+    const fx = cue.x - b.x;
+    const fy = cue.y - b.y;
+    const bCoef = fx * nx + fy * ny;
+    const cCoef = fx * fx + fy * fy - twoR * twoR;
+    const disc  = bCoef * bCoef - cCoef;
+    if (disc < 0) continue;
+    const t = -bCoef - Math.sqrt(disc);
+    if (t > 1 && t < minT) {  // t > 1 avoids self-hit at origin
+      minT    = t;
+      hitBall = b;
+    }
+  }
+
+  return hitBall ? { t: minT, ball: hitBall } : null;
 }
 
 // ── Rendering ─────────────────────────────────────────────
@@ -391,7 +394,7 @@ function render(ctx, g, drag) {
   // Colored balls
   for (const b of g.balls) drawBall(ctx, b, b.color);
 
-  // Aim line + cue stick (only while actively dragging)
+  // Aim line + prediction + cue stick (only while actively dragging)
   if (drag.active && !g.shotLocked && !g.scratch) {
     const cue = g.cueBall;
     const dx  = drag.curX - drag.startX;
@@ -402,17 +405,53 @@ function render(ctx, g, drag) {
       const nx    = -dx / dragDist;
       const ny    = -dy / dragDist;
       const power = Math.min(dragDist / 8, maxPower);
-      const len   = (power / maxPower) * 120;
 
-      // Aim line (dashed cyan)
+      const guideLevel = getUpgradeValue('pool_guide');
+      const maxLen  = 100 + guideLevel * 80;
+      const aimLen  = (power / maxPower) * maxLen;
+
+      // Find first ball the cue would hit (for line truncation + prediction)
+      const hit = findFirstHit(cue, g.balls, nx, ny);
+      const lineEnd = (hit && hit.t < aimLen) ? hit.t : aimLen;
+
+      // Aim line (dashed cyan), stops at first ball contact
       ctx.setLineDash([6, 5]);
       ctx.strokeStyle = 'rgba(0,255,255,0.75)';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.moveTo(cue.x, cue.y);
-      ctx.lineTo(cue.x + nx * len, cue.y + ny * len);
+      ctx.lineTo(cue.x + nx * lineEnd, cue.y + ny * lineEnd);
       ctx.stroke();
       ctx.setLineDash([]);
+
+      // Collision prediction: ghost ball + deflection arrow (guide level 3+)
+      if (guideLevel >= 3 && hit && hit.t <= maxLen) {
+        const ghostX = cue.x + nx * hit.t;
+        const ghostY = cue.y + ny * hit.t;
+
+        // Ghost ball outline showing where cue ball will be at impact
+        ctx.beginPath();
+        ctx.arc(ghostX, ghostY, BALL_R, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(0,255,255,0.3)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Deflection direction the hit ball will travel
+        const cnx = (hit.ball.x - ghostX) / (BALL_R * 2);
+        const cny = (hit.ball.y - ghostY) / (BALL_R * 2);
+        const deflLen = 40 + (guideLevel - 3) * 20;  // 40 / 60 / 80 at lvl 3/4/5
+
+        ctx.beginPath();
+        ctx.moveTo(hit.ball.x, hit.ball.y);
+        ctx.lineTo(hit.ball.x + cnx * deflLen, hit.ball.y + cny * deflLen);
+        ctx.strokeStyle = 'rgba(255,200,0,0.7)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 3]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
 
       // Cue stick (from drag start toward drag current)
       ctx.strokeStyle = 'rgba(180,140,60,0.6)';
@@ -449,10 +488,7 @@ function drawBall(ctx, b, color) {
   grad.addColorStop(0, lighten(color));
   grad.addColorStop(1, darken(color));
   ctx.fillStyle = grad;
-  ctx.shadowColor = color;
-  ctx.shadowBlur = 8;
   ctx.fill();
-  ctx.shadowBlur = 0;
 }
 
 function lighten(hex) {

@@ -153,6 +153,17 @@ export const UPGRADES = [
     maxLevel: 3,
     effect: lvl => lvl * 3,  // additive px (not a multiplier)
   },
+  {
+    id: 'pool_guide',
+    name: 'Laser Line',
+    desc: 'Longer aim guide; at level 3+ shows ghost ball and deflection direction',
+    icon: '📐',
+    currency: 'bits',
+    baseCost: 350,
+    costScale: 2.5,
+    maxLevel: 5,
+    effect: lvl => lvl,
+  },
   // ── Global upgrades ───────────────────────────────────
   {
     id: 'auto_mult',
