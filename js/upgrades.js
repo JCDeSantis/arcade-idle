@@ -86,6 +86,73 @@ export const UPGRADES = [
     maxLevel: 5,
     effect: lvl => lvl * 5,  // added px (not a multiplier)
   },
+  // ── Pool upgrades ─────────────────────────────────────
+  {
+    id: 'pool_bit_mult',
+    name: 'Hustle Pay',
+    desc: 'Pool sessions earn +25% Bits per level',
+    icon: '💰',
+    currency: 'bits',
+    baseCost: 100,
+    costScale: 2.5,
+    maxLevel: 10,
+    effect: lvl => 1 + lvl * 0.25,
+  },
+  {
+    id: 'pool_td_mult',
+    name: 'Pocket Wisdom',
+    desc: 'Pool sessions earn +30% Training Data per level',
+    icon: '🧠',
+    currency: 'trainingData',
+    baseCost: 20,
+    costScale: 2.2,
+    maxLevel: 8,
+    effect: lvl => 1 + lvl * 0.30,
+  },
+  {
+    id: 'pool_mastery_rate',
+    name: 'Cue Mastery',
+    desc: 'Pool mastery gain rate +20% per level',
+    icon: '🎱',
+    currency: 'bits',
+    baseCost: 300,
+    costScale: 2.5,
+    maxLevel: 5,
+    effect: lvl => 1 + lvl * 0.20,
+  },
+  {
+    id: 'pool_rack_size',
+    name: 'Full Rack',
+    desc: 'Add +1 ball to each rack per level (base 6)',
+    icon: '🔺',
+    currency: 'bits',
+    baseCost: 500,
+    costScale: 3.0,
+    maxLevel: 4,
+    effect: lvl => lvl,  // additive: base 6 + lvl balls
+  },
+  {
+    id: 'pool_power_cap',
+    name: 'Break Force',
+    desc: 'Max shot power +3 per level',
+    icon: '💥',
+    currency: 'bits',
+    baseCost: 250,
+    costScale: 2.5,
+    maxLevel: 3,
+    effect: lvl => lvl * 3,  // additive px/frame (not a multiplier)
+  },
+  {
+    id: 'pool_pocket_size',
+    name: 'Wide Pockets',
+    desc: 'Pocket radius +3px per level',
+    icon: '⭕',
+    currency: 'bits',
+    baseCost: 200,
+    costScale: 2.0,
+    maxLevel: 3,
+    effect: lvl => lvl * 3,  // additive px (not a multiplier)
+  },
   // ── Global upgrades ───────────────────────────────────
   {
     id: 'auto_mult',
@@ -252,7 +319,7 @@ export function purchaseUpgrade(id) {
   return true;
 }
 
-const GAME_IDS = ['paddle', 'target', 'circuit'];
+const GAME_IDS = ['paddle', 'target', 'circuit', 'pool'];
 
 /** Return upgrades relevant to a specific context.
  *  context: 'paddle' | 'target' | 'circuit' | 'global'
