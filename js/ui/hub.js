@@ -11,6 +11,7 @@ export function initHub() {
     renderHub();
     if (stage === 2) showNotification('STAGE 2 UNLOCKED — TARGET GAME NOW AVAILABLE', 'var(--amber)');
     if (stage === 3) showNotification('STAGE 3 UNLOCKED — CIRCUIT GAME NOW AVAILABLE', 'var(--cyan)');
+    if (stage === 4) showNotification('STAGE 4 UNLOCKED — RACK GAME NOW AVAILABLE', 'var(--magenta)');
   });
   on('game:result',  () => renderHub());
   on('prestige', ({ nc, count }) => {
@@ -26,6 +27,7 @@ function renderHub() {
       ${gameCard('paddle', '🎮', 'PADDLE')}
       ${gameCard('target', '🎯', 'TARGET')}
       ${gameCard('circuit', '🔗', 'CIRCUIT')}
+      ${gameCard('pool', '🎱', 'RACK')}
     </div>
     <div class="hub-title">AI TRAINING ARCADE</div>
     ${state.prestige.count > 0 ? `<div class="hub-prestige-badge">PRESTIGE ${state.prestige.count}</div>` : ''}
@@ -149,6 +151,7 @@ function gameCard(id, icon, label) {
   const lockMessages = {
     target:  'REACH 50K BITS',
     circuit: 'REACH 200K BITS',
+    pool:    'REACH 500K BITS',
   };
   const lockMsg = lockMessages[id] ?? '';
 
