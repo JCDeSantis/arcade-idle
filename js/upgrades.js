@@ -67,13 +67,13 @@ export const UPGRADES = [
   {
     id: 'target_tracking_speed',
     name: 'Targeting Core',
-    desc: 'Turret tracks mouse +0.5 rad/sec faster per level',
+    desc: 'Circle tracks mouse faster (+0.5 lerp speed per level)',
     icon: '🎯',
     currency: 'bits',
     baseCost: 250,
     costScale: 2.5,
     maxLevel: 5,
-    effect: lvl => lvl * 0.5,  // added rad/sec (not a multiplier)
+    effect: lvl => lvl * 0.5,  // added lerp speed (not a multiplier)
   },
   {
     id: 'target_cursor_size',
