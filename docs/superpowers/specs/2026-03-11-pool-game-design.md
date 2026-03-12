@@ -64,7 +64,7 @@ Standard economy upgrades (consumed by `base-game.js` `submitResult`):
 |----|------|--------|
 | `pool_bit_mult` | Hustle Pay | Pool sessions earn +25% Bits per level (10 levels, costs bits) |
 | `pool_td_mult` | Pocket Wisdom | Pool sessions earn +30% Training Data per level (8 levels, costs trainingData) |
-| `pool_mastery_rate` | Cue Mastery | Pool mastery gain rate ×1.5 per level (5 levels, costs bits) |
+| `pool_mastery_rate` | Cue Mastery | Pool mastery gain rate +20% per level — `effect: lvl => 1 + lvl * 0.20` (5 levels, costs bits) |
 
 Pool-specific gameplay upgrades:
 
@@ -86,7 +86,7 @@ When global idle automation is active and all balls are settled (shot lock is of
   - Add `pool` entry to `state.games` (initially `unlocked: false`)
   - Add `unlockStage4()` function that sets `state.stage = 4` and `state.games.pool.unlocked = true`, emits `stage:unlock`
 - **Modify:** `js/loop.js` — add Stage 4 unlock check in `tick()`: `if (state.stage < 4 && state.currencies.lifetimeBits >= 500000) { unlockStage4(); }` (500k lifetimeBits threshold, consistent with Stage 2 = 50k, Stage 3 = 200k progression)
-- **Modify:** `js/upgrades.js` — add all `pool_*` upgrade entries
+- **Modify:** `js/upgrades.js` — add all `pool_*` upgrade entries; add `'pool'` to the `GAME_IDS` array (used by `getUpgradesForContext` to filter global upgrades)
 - **Modify:** `js/ui/hub.js` — add pool game card
 
 ## Out of Scope
