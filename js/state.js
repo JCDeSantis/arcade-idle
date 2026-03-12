@@ -41,6 +41,13 @@ export function createDefaultState() {
         mastery: 0,
         totalRuns: 0,
       },
+      pool: {
+        unlocked: false,
+        bestScore: 0,
+        recentScores: [],
+        mastery: 0,
+        totalRuns: 0,
+      },
     },
     upgrades: {},         // upgradeId -> level (number)
     prestigeUpgrades: {}, // upgradeId -> true/false
@@ -128,4 +135,11 @@ export function unlockStage3() {
   state.stage = 3;
   state.games.circuit.unlocked = true;
   emit('stage:unlock', { stage: 3 });
+}
+
+export function unlockStage4() {
+  if (state.stage >= 4) return;
+  state.stage = 4;
+  state.games.pool.unlocked = true;
+  emit('stage:unlock', { stage: 4 });
 }
