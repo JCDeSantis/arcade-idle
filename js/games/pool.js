@@ -60,6 +60,8 @@ export function launchPool(onExit) {
 
   // Drag state — tracks mousedown-to-mouseup for cue aiming
   let drag = { active: false, startX: 0, startY: 0, curX: 0, curY: 0 };
+  let lastInteraction = Date.now();
+  const AUTO_IDLE_MS = 3000;  // auto-shot only fires after 3s of no mouse activity
 
   function toCanvas(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
@@ -67,6 +69,7 @@ export function launchPool(onExit) {
   }
 
   function onMouseDown(e) {
+    lastInteraction = Date.now();
     if (game.shotLocked || game.scratch) return;
     const { x, y } = toCanvas(e.clientX, e.clientY);
     if (Math.hypot(x - game.cueBall.x, y - game.cueBall.y) <= DRAG_TOLERANCE) {
@@ -75,6 +78,7 @@ export function launchPool(onExit) {
   }
 
   function onMouseMove(e) {
+    lastInteraction = Date.now();
     if (drag.active) {
       const { x, y } = toCanvas(e.clientX, e.clientY);
       drag.curX = x;
@@ -83,6 +87,7 @@ export function launchPool(onExit) {
   }
 
   function onMouseUp(e) {
+    lastInteraction = Date.now();
     if (!drag.active) return;
     const { x, y } = toCanvas(e.clientX, e.clientY);
     drag.curX = x;
@@ -102,8 +107,9 @@ export function launchPool(onExit) {
 
     update(game, dt);
 
-    // Automation: auto-fire when idle automation is active and table is ready
-    if (!game.shotLocked && !game.scratch && getAutoRate('pool') > 0) {
+    // Automation: auto-fire only when player has been idle for 3s
+    const playerIdle = Date.now() - lastInteraction >= AUTO_IDLE_MS;
+    if (!game.shotLocked && !game.scratch && playerIdle && getAutoRate('pool') > 0) {
       autoShot(game);
     }
 
